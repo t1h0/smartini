@@ -1,9 +1,9 @@
-"""Interface classes exist for coder interaction, to simplify the process behind smartini.
-"""
+"""Interface classes exist for coder interaction, to simplify the process
+behind smartini."""
 
 from pathlib import Path
-from typing import Any, Literal
-from src.exceptions import IniContinuationError, IniStructureError
+from typing import Any, Type
+from src.exceptions import ContinuationError, IniStructureError, ExtractionError
 from src.entities import Comment, Option, SectionName, OptionKey
 from src.proxies import IniProxy, SectionProxy
 from re import search, escape, split, fullmatch
@@ -85,14 +85,15 @@ class Ini(metaclass=_IniMeta):
         entity_delimiter: str | RawRegex = RawRegex(r"\n"),
         comment_prefixes: str | RawRegex | tuple[str | RawRegex, ...] = ";",
         option_delimiters: str | RawRegex | tuple[str | RawRegex, ...] = "=",
-        continuation_allowed: (
+        continuation_allowed: bool = True,
+        continuation_prefix: str | RawRegex = RawRegex(r"\t"),
+        continuation_ignore: (
             tuple[
-                Literal["section_name"] | Literal["comment"] | Literal["option"],
+                Type[SectionName] | Type[Option] | Type[Comment],
                 ...,
             ]
-            | bool
-        ) = True,
-        continuation_prefix: str | RawRegex = RawRegex(r"\t"),
+            | None
+        ) = None,
         ignore_whitespace_lines: bool = True,
     ) -> None:
         """Read a base ini and optionally update it with a user ini as long as the
@@ -110,16 +111,16 @@ class Ini(metaclass=_IniMeta):
             option_delimiters (str | RawRegex | tuple[str | RawRegex, ...], optional):
                 Delimiter characters that delimit keys from values. If multiple are
                 given, the first will be taken for writing. Defaults to "=".
-            continuation_allowed (tuple["section_name" | "comment" |
-                "option", ...] | bool, optional): Whether continuation of options
-                (i.e. multiline options) are allowed. If True, will allow every
-                continuation that does not qualify as a section name, comment or option.
-                Alternatively, a tuple containing one or more of those entities can be
-                passed to also interpret them as a continuation if preceeded by an
-                option and optionally a continuation prefix
-                (see continuation_prefix argument). Defaults to True.
-            continuation_prefix (str | RawRegex, optional): Prefix to denote option
-                continuations. Defaults to RawRegex(r"\t") (TAB character).
+            continuation_allowed (bool, optional): Whether continuation of options
+                (i.e. multiline options) are allowed. Defaults to True.
+            continuation_prefix (str | RawRegex, optional): Prefix to denote options'
+                value continuations. Defaults to RawRegex(r"\t") (TAB character).
+            continuation_ignore (tuple[Type[SectionName] | Type[Option] | Type[Comment],
+                ...] | None, optional): Entities to ignore while continuing an option's
+                value. I.e. will interpret detected entities as continuation of the
+                preceeding option's value if continuation rules are met (see other
+                continuation arguments). Defaults to None (always interpret detected
+                entities as new entities).
             ignore_whitespace_lines (bool, optional): Whether to interpret lines with
                 only whitespace characters (space or tab) as empty lines.
                 Defaults to True.
@@ -135,18 +136,19 @@ class Ini(metaclass=_IniMeta):
         )
 
         self.comment_prefixes = (
-            (comment_prefixes,)
-            if not isinstance(comment_prefixes, tuple)
-            else comment_prefixes
+            comment_prefixes
+            if isinstance(comment_prefixes, tuple)
+            else (comment_prefixes,)
         )
         self.option_delimiters = (
-            (option_delimiters,)
-            if not isinstance(option_delimiters, tuple)
-            else option_delimiters
+            option_delimiters
+            if isinstance(option_delimiters, tuple)
+            else (option_delimiters,)
         )
 
         self.continuation_allowed = continuation_allowed
         self.continuation_prefix = continuation_prefix
+        self.continuation_ignore = continuation_ignore or ()
         # define continuation parameters
         if self.continuation_allowed:
             self.continuation_prefix_regex = (
@@ -154,10 +156,6 @@ class Ini(metaclass=_IniMeta):
                 if isinstance(self.continuation_prefix, RawRegex)
                 else escape(self.continuation_prefix)
             )
-            if isinstance(self.continuation_allowed, bool):
-                self.continuation_allowed = (True,)
-        else:
-            self.continuation_allowed = tuple()
 
         self.ignore_whitespace_lines = ignore_whitespace_lines
         # define, what defines an empty line
@@ -181,7 +179,7 @@ class Ini(metaclass=_IniMeta):
 
         # initialize section metas
         for name, section in self._smartini_section_metas:
-            setattr(self, name, section(self.cfg.sections[SectionName(section._name)]))        
+            setattr(self, name, section(self.cfg.sections[SectionName(section._name)]))
 
     def _read_ini(
         self,
@@ -192,8 +190,6 @@ class Ini(metaclass=_IniMeta):
         Args:
             path (str | Path): Path to the ini file.
         """
-        assert isinstance(self.continuation_allowed, tuple)
-
         parsed_ini: IniProxy = IniProxy()
 
         with open(path, "r") as file:
@@ -210,6 +206,7 @@ class Ini(metaclass=_IniMeta):
 
         for entity_index, entity_content in enumerate(entities):
 
+            # check for continuation
             possible_continuation = (
                 last_option
                 and self.continuation_allowed
@@ -222,35 +219,31 @@ class Ini(metaclass=_IniMeta):
 
             if possible_continuation:
                 # remove continuation prefix from entity content
-                entity_content = continuation.group(0)
+                entity_content = continuation[0]
 
             if fullmatch(self.empty_entity, entity_content):
                 # empty entity, skip and close off last option
                 last_option = None
                 continue
 
-            extract_option = (
-                not possible_continuation or "option" not in self.continuation_allowed
-            )
-            extract_comment = (
-                not possible_continuation or "comment" not in self.continuation_allowed
-            )
-            extract_section = (
-                not possible_continuation
-                or "section_name" not in self.continuation_allowed
+            # extract entity
+            gates = (SectionName, Option, Comment)
+            extractors = (
+                lambda x: SectionName(name_with_brackets=x),
+                lambda x: Option(delimiter=self.option_delimiters, from_string=x),
+                lambda x: Comment(prefix=self.comment_prefixes, content_with_prefix=x),
             )
 
-            # extract entity
             extracted_entity = entity_content
-            # extractors are only called if set before
-            if extract_option and (option := self._extract_option(entity_content)):
-                extracted_entity = option
-            elif extract_comment and (comment := self._extract_comment(entity_content)):
-                extracted_entity = comment
-            elif extract_section and (
-                section_name := self._extract_section_name(entity_content)
-            ):
-                extracted_entity = section_name
+
+            for gate, Extractor in zip(gates, extractors):
+                # extractors are only called if set before
+                if not possible_continuation or gate not in self.continuation_ignore:
+                    try:
+                        extracted_entity = Extractor(entity_content)
+                    except ExtractionError:
+                        continue
+                    break
 
             # Handling section names
 
@@ -261,7 +254,7 @@ class Ini(metaclass=_IniMeta):
                 else:
                     # new section
                     current_section = SectionProxy(name=extracted_entity)
-                    parsed_ini.sections[current_section.name] = current_section
+                    parsed_ini.sections[extracted_entity] = current_section
                 continue
 
             # Handling continuations
@@ -276,11 +269,11 @@ class Ini(metaclass=_IniMeta):
                         f"line {entity_index} could not be assigned to a key"
                     )
                 if not self.continuation_allowed:
-                    raise IniContinuationError(
+                    raise ContinuationError(
                         f"line {entity_index} is continuation but continuation is not allowed"
                     )
                 if not possible_continuation:
-                    raise IniContinuationError(
+                    raise ContinuationError(
                         f"line {entity_index} doesn't follow continuation rules"
                     )
 
@@ -295,7 +288,7 @@ class Ini(metaclass=_IniMeta):
             if not current_section:
                 # processed line is a sectionless comment or option
                 current_section = SectionProxy(name=None)
-                parsed_ini.sections[current_section.name] = current_section
+                parsed_ini.sections[None] = current_section
 
             # add comment or option to current section's structure
             current_section.structure.append(extracted_entity)
@@ -306,70 +299,3 @@ class Ini(metaclass=_IniMeta):
                 current_section.options[extracted_entity.key] = extracted_entity
 
         return parsed_ini
-
-    def _extract_section_name(self, entity: str) -> SectionName | None:
-        """Extract section name of an ini entity if possible.
-
-        Args:
-            entity (str): Entity to extract the section name from.
-
-        Returns:
-            SectionName | None: The extracted section name or None if no section name
-                could be extracted.
-        """
-        section = search(r"(?<=^\[).*(?=\]$)", entity)
-        return SectionName(section.group(0).strip()) if section else None
-
-    def _extract_comment(self, entity: str) -> Comment | None:
-        """Extract comment of an ini entity if possible.
-
-        Args:
-            entity (str): Entity to extract the comment from.
-
-        Returns:
-            Comment | None: The extracted comment or None if no comment
-                could be extracted.
-        """
-        comment = split(
-            rf"(?<=^[{''.join(escape(comment_prefix) for comment_prefix in self.comment_prefixes)}])(?=.)",
-            entity,
-            maxsplit=1,
-        )
-        if len(comment) != 2:
-            return None
-        return Comment(content=comment[-1].strip(), delimiter=comment[0].strip())
-
-    def _extract_option(self, entity: str) -> Option | None:
-        """Extract option of an ini entity if possible.
-
-        Args:
-            entity (str): Entity to extract the option from.
-
-        Returns:
-            Option | None: The extracted option or None if no option
-                could be extracted.
-        """
-        # extracting left and right side of delimiter
-        lr = split(
-            rf"[{''.join(escape(delimiter) for delimiter in self.option_delimiters)}]",
-            entity,
-            maxsplit=1,
-        )
-
-        if len(lr) != 2:
-            # no split was possible (entity is not option)
-            return None
-
-        key, value = lr
-
-        key = key.strip()
-        # taking last word of left side as key
-        key = search(r"\b([\w\.\-\_]+)\b$", key)
-        if not key:
-            return None
-        key = key.group(0)
-
-        value = value.strip()
-
-        return Option(key=OptionKey(key), value=value or None)
-
