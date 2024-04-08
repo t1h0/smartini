@@ -1,9 +1,11 @@
 """Ini entities are either a section name, an option or a comment."""
 
-from typing import overload
+from typing import overload, Any
 from typing_extensions import Self
 from re import split, escape, search, sub
 from src.exceptions import ExtractionError
+from src.args import RawRegex
+from dataclasses import dataclass
 
 
 class Comment:
@@ -27,7 +29,7 @@ class Comment:
     def __init__(
         self,
         content_without_prefix: str | None = None,
-        prefix: str | tuple[str, ...] | None = None,
+        prefix: str | RawRegex | tuple[str | RawRegex, ...] | None = None,
         content_with_prefix: str | None = None,
     ) -> None:
         """An ini comment.
@@ -36,22 +38,25 @@ class Comment:
             content_without_prefix (str | None, optional): Content with prefix removed.
                 Should be None if content_with_prefix is provided, otherwise the latter
                 will be ignored. Defaults to None.
-            prefix (str | tuple[str, ...] | None, optional): Prefix that denotes the
-                comment. Defaults to None.
+            prefix (str | tuple[str | RawRegex, ...] | None, optional): One ore more
+                prefixes that denote a comment. If content_without_prefix is provieded
+                and more than one prefix are given, first one will be stored.
+                Defaults to None.
             content_with_prefix (str | None, optional): Content including prefix.
                 Will be ignored if content_without_prefix is provided. Defaults to None.
         """
-        if isinstance(prefix, str):
-            prefix = (prefix,)
+        if not isinstance(prefix, tuple):
+            prefix = (prefix if prefix is not None else "",)
+        assert isinstance(prefix, tuple)
 
         if content_without_prefix is not None:
-            self.prefix = prefix[0] if prefix else ""
+            self.prefix = prefix[0]
             self.content = content_without_prefix
             return
 
         elif content_with_prefix is not None:
             prefix_regex = (
-                rf"[{''.join(escape(comment_prefix) for comment_prefix in prefix)}]"
+                rf"[{''.join(comment_prefix if isinstance(comment_prefix,RawRegex) else escape(comment_prefix) for comment_prefix in prefix)}]"
                 if prefix
                 else ""
             )
@@ -74,6 +79,14 @@ class OptionKey(str):
     pass
 
 
+@dataclass
+class OptionValue:
+    """An ini option's value."""
+
+    base: Any = None
+    user: Any = None
+
+
 class Option:
     """An ini option."""
 
@@ -90,7 +103,7 @@ class Option:
         self,
         key: None = ...,
         value: None = ...,
-        delimiter: ... = ...,
+        delimiter: str | RawRegex | tuple[str | RawRegex, ...] = ...,
         from_string: str = ...,
     ) -> None: ...
 
@@ -98,7 +111,7 @@ class Option:
         self,
         key: str | OptionKey | None = None,
         value: str | list[str] | None = None,
-        delimiter: str | tuple[str, ...] = "=",
+        delimiter: str | RawRegex | tuple[str | RawRegex, ...] | None = None,
         from_string: str | None = None,
     ) -> None:
         """An ini option.
@@ -110,21 +123,24 @@ class Option:
             value (str | list[str] | None, optional): The option value. Should be None
                 if from_string is provided, otherwise from_string will be ignored.
                 Defaults to None.
-            delimiter (str | tuple[str, ...], optional): The delimiter to delimit key
-                and value in the ini file. Defaults to "=".
+            delimiter (str | tuple[str, ...], None, optional): One or more delimiters
+                that delimit key and value. Defaults to None.
             from_string (str | None, optional): A string containing key, delimiter and
                 value. If provided, key or value argument must be None, otherwise will
                 be ignored. Defaults to None.
         """
-        if isinstance(delimiter, str):
-            delimiter = (delimiter,)
-
-        if key is not None and value is not None:
+        if key is not None:
+            if not isinstance(key, str):
+                raise ValueError(f"key must be string (is {type(key)})")
             self.key = OptionKey(key)
-            self.value = value
-            self.delimiter = delimiter[0]
-            return
-        elif from_string is not None:
+            if isinstance(value, OptionValue):
+                self._value = value
+            else:
+                self._value = OptionValue(base=value)
+            self.delimiter = delimiter[0] if isinstance(delimiter, tuple) else delimiter
+        elif from_string is not None and delimiter:
+            if not isinstance(delimiter, tuple):
+                delimiter = (delimiter,)
             # extracting left and right side of delimiter
             lr = split(
                 rf"[{''.join(escape(deli) for deli in delimiter)}]",
@@ -139,10 +155,37 @@ class Option:
             ):
                 # taking last word of left side as key
                 self.key = OptionKey(last_key.group(0))
-                self.value = lr[1].strip()
-                return
+                self._value = OptionValue(base=lr[1].strip())
+                self.delimiter = delimiter[0]
+            else:
+                raise ExtractionError("Option could not be extracted.")
 
-        raise ExtractionError("Option could not be extracted.")
+    @property
+    def value(self) -> Any:
+        return self._value.user if self._value.user is not None else self._value.base
+
+    @value.setter
+    def value(self, value: Any) -> None:
+        if self._value.base is None:
+            self._value.base = value
+        else:
+            self._value.user = value
+
+
+class UndefinedOption(Option):
+    """Option, that is not in the provided ini schema."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        # convert Option to UndefinedOption if provided
+        if len(args) == 1 and not kwargs and isinstance(option := args[0], Option):
+            args = ()
+            kwargs = {
+                "key": option.key,
+                "value": option.value,
+                "delimiter": option.delimiter,
+            }
+
+        super().__init__(*args, **kwargs)
 
 
 class SectionName(str):

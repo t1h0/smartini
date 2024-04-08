@@ -2,300 +2,538 @@
 behind smartini."""
 
 from pathlib import Path
-from typing import Any, Type
-from src.exceptions import ContinuationError, IniStructureError, ExtractionError
-from src.entities import Comment, Option, SectionName, OptionKey
-from src.proxies import IniProxy, SectionProxy
-from re import search, escape, split, fullmatch
-
-
-class RawRegex(str):
-    """Denotes a raw regex string. Initialize with RawRegex(r"<yourstringhere>")."""
-
-    pass
+from dataclasses import replace as dataclass_replace
+import contextlib
+from typing import Any, Literal, overload, Callable
+from src.exceptions import (
+    ContinuationError,
+    IniStructureError,
+    ExtractionError,
+    UndefinedSectionError,
+)
+from src.entities import Comment, Option, SectionName, UndefinedOption
+from src.args import Parameters
+from src.globals import (
+    COMMENT_VAR_PREFIX,
+    UNNAMED_SECTION_NAME,
+    SECTION_NAME_VARIABLE,
+    INTERNAL_PREFIX,
+    INTERNAL_PREFIX_IN_WORDS,
+    VARIABLE_PREFIX,
+)
+from re import search, split, fullmatch, sub
+from nomopytools.func import copy_doc
 
 
 class _SectionMeta(type):
     """Metaclass for ini configuration file sections. Section names must be specified
-    via '_name' class variable.
+    via '__name' class variable.
     """
 
     # name of the section. must be provided!
-    _name: str
+    _name: str | None
 
-    def __new__(cls, name, bases, attrs):
-        #  make sure, _name is provided
-        if bases and Section in bases and "_name" not in attrs:
+    def __new__(cls, __name: str, __bases: tuple, __dict: dict):
+        #  make sure it's the initialization call
+        if (
+            __bases
+            and Section in __bases
+            and __name != "UndefinedSection"
+            and SECTION_NAME_VARIABLE not in __dict
+        ):
             raise AttributeError(
-                f"Class '{name}' must define section name as '_name' class attribute."
+                f"Class '{__name}' must define section name as '{SECTION_NAME_VARIABLE}' class attribute."
             )
-        return super().__new__(cls, name, bases, attrs)
+        return super().__new__(cls, __name, __bases, __dict)
 
 
 class Section(metaclass=_SectionMeta):
-    """Class for ini configuration file sections. Name of the section must be defined via
-    '_name' class attribute.
-    """
 
     # name of the section. must be provided!
-    _name: str
+    _name: str | None
 
-    def __init__(self, proxy: SectionProxy) -> None:
-        self._proxy = proxy
+    def __init__(self) -> None:
+        """An ini configuration file section. Name of the section must be defined via
+        '__name' class attribute.
+        """
+        # initialize Options
+        for var, val in vars(self.__class__).items():
+            # every string variable without leading INTERNAL_PREFIX
+            # will be interpreted as an option
+            if (
+                not fullmatch(r"^__.*__$", var)
+                and isinstance(val, str)
+                and var != SECTION_NAME_VARIABLE
+            ):
+                if var.startswith(INTERNAL_PREFIX):
+                    raise NameError(
+                        f"Option variable names must not start with "
+                        f"{INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
+                    )
+                setattr(self, var, Option(key=val))
 
     def __getattribute__(self, __name: str) -> Any:
-        proxy: SectionProxy = super().__getattribute__("_proxy")
-        attribute = super().__getattribute__(__name)
-        # check if attribute in proxy options, else return class attribute
-        if proxy and attribute in proxy.options:
-            return proxy.options[super().__getattribute__(__name)].value
-        else:
-            return attribute
-
-    def __setattribute__(self, key: Any, value: Any) -> None:
-        if key == "_name":
-            super().__setattr__(key, value)
-        elif proxy := super().__getattribute__("_proxy"):
-            proxy.options[super().__getattribute__(key)].value = value
+        attr = super().__getattribute__(__name)
+        return attr.value if isinstance(attr, Option) else attr
 
 
-class _IniMeta(type):
-    """Metaclass for Ini class. Needed for saving the non-initialized Sections to later
-    initialize them.
-    """
-
-    def __new__(cls, name, bases, attrs):
-        if bases and Ini in bases:
-            # save sections so we can initialize them later
-            attrs["_smartini_section_metas"] = tuple(
-                (k, v) for k, v in attrs.items() if isinstance(v, _SectionMeta)
             )
-        return super().__new__(cls, name, bases, attrs)
+            if var is None:
+                raise NameError(
+                    f"'{key}' is not a known key of any option in section '{getattr(self,SECTION_NAME_VARIABLE)}'"
+                )
+            option = var
+        match cfg:
+            case "auto":
+                setattr(self, option, value)
+            case "base":
+                super().__getattribute__(option)
 
 
-class Ini(metaclass=_IniMeta):
-
-    # will be filled by metaclass
-    _smartini_section_metas: tuple[tuple[str, _SectionMeta], ...]
-
-    def __init__(
-        self,
-        base_path: str | Path,
-        user_path: str | Path | None = None,
-        entity_delimiter: str | RawRegex = RawRegex(r"\n"),
-        comment_prefixes: str | RawRegex | tuple[str | RawRegex, ...] = ";",
-        option_delimiters: str | RawRegex | tuple[str | RawRegex, ...] = "=",
-        continuation_allowed: bool = True,
-        continuation_prefix: str | RawRegex = RawRegex(r"\t"),
-        continuation_ignore: (
-            tuple[
-                Type[SectionName] | Type[Option] | Type[Comment],
-                ...,
-            ]
-            | None
-        ) = None,
-        ignore_whitespace_lines: bool = True,
-    ) -> None:
-        """Read a base ini and optionally update it with a user ini as long as the
-        user ini's keys have valid values (invalid user keys will be ignored).
+class UndefinedSection(Section):
+    def __init__(self, section_name: str | None) -> None:
+        """Class for sections that are not user-defined in the provided schema.
 
         Args:
-            base_path (str | Path): Path to the base ini.
-            user_path (str | Path | None, optional): Path to the user ini.
-                Defaults to None.
-            entity_delimiter (str | RawRegex, optional): Delimiter that delimits ini
-                entities (section name, option, comment). Defaults to RawRegex(r"\n").
-            comment_prefixes (str | RawRegex | tuple[str | RawRegex, ...], optional):
-                Prefix characters that denote a comment. If multiple are given,
-                the first will be taken for writing. Defaults to ";".
-            option_delimiters (str | RawRegex | tuple[str | RawRegex, ...], optional):
-                Delimiter characters that delimit keys from values. If multiple are
-                given, the first will be taken for writing. Defaults to "=".
-            continuation_allowed (bool, optional): Whether continuation of options
-                (i.e. multiline options) are allowed. Defaults to True.
-            continuation_prefix (str | RawRegex, optional): Prefix to denote options'
-                value continuations. Defaults to RawRegex(r"\t") (TAB character).
-            continuation_ignore (tuple[Type[SectionName] | Type[Option] | Type[Comment],
-                ...] | None, optional): Entities to ignore while continuing an option's
-                value. I.e. will interpret detected entities as continuation of the
-                preceeding option's value if continuation rules are met (see other
-                continuation arguments). Defaults to None (always interpret detected
-                entities as new entities).
-            ignore_whitespace_lines (bool, optional): Whether to interpret lines with
-                only whitespace characters (space or tab) as empty lines.
-                Defaults to True.
+            section_name (str | None): Name of the section.
         """
+        setattr(self, SECTION_NAME_VARIABLE, section_name)
+        super().__init__()
+
+
+class _SchemaMeta(type):
+    """Metaclass for schema class."""
+
+    def __new__(cls, __name: str, __bases: tuple, __dict: dict):
+        #  make sure it's the initialization call
+        if __bases and Schema in __bases:
+            if wrong_var := next(
+                (
+                    var
+                    for var, val in __dict.items()
+                    if isinstance(val, _SectionMeta) and var.startswith(INTERNAL_PREFIX)
+                ),
+                None,
+            ):
+                raise NameError(
+                    "Section variable names must not start with "
+                    f"{INTERNAL_PREFIX_IN_WORDS} (for '{__dict['__qualname__']}."
+                    f"{wrong_var}')"
+                )
+        return super().__new__(cls, __name, __bases, __dict)
+
+
+class Schema(metaclass=_SchemaMeta):
+
+    def __init__(self, parameters: Parameters | None = None, **kwargs) -> None:
+        """Schema class. Parameters will be stored as default read and write parameters.
+
+        Args:
+            parameters (Parameters | None, optional): Default parameters for reading and
+                writing inis, as an Parameters object. Parameters can also be passed
+                as kwargs. Missing parameters (because parameters is None and no or not
+                enough kwargs are passed) will be taken from default Parameters
+                (see doc of Parameters). Defaults to None.
+            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
+        """
+
         ### read arguments ###
-        self.base_path = base_path
-        self.user_path = user_path
+        if parameters is None:
+            parameters = Parameters()
+        if kwargs:
+            parameters = dataclass_replace(parameters, **kwargs)
+        self._default_parameters = parameters
 
-        self.entity_delimiter = (
-            entity_delimiter
-            if isinstance(entity_delimiter, RawRegex)
-            else escape(entity_delimiter)
-        )
+    def _get_sections(self) -> dict[str, Section]:
+        """Get all sections of the ini.
 
-        self.comment_prefixes = (
-            comment_prefixes
-            if isinstance(comment_prefixes, tuple)
-            else (comment_prefixes,)
-        )
-        self.option_delimiters = (
-            option_delimiters
-            if isinstance(option_delimiters, tuple)
-            else (option_delimiters,)
-        )
+        Returns:
+            dict[str, Section]: Dicitonary with access (variable) names as keys and the
+                Sections as values.
+        """
+        return {var: val for var, val in vars(self).items() if isinstance(val, Section)}
 
-        self.continuation_allowed = continuation_allowed
-        self.continuation_prefix = continuation_prefix
-        self.continuation_ignore = continuation_ignore or ()
-        # define continuation parameters
-        if self.continuation_allowed:
-            self.continuation_prefix_regex = (
-                self.continuation_prefix
-                if isinstance(self.continuation_prefix, RawRegex)
-                else escape(self.continuation_prefix)
-            )
-
-        self.ignore_whitespace_lines = ignore_whitespace_lines
-        # define, what defines an empty line
-        self.empty_entity = r"[\s\t]*" if self.ignore_whitespace_lines else r""
-
-        ### read inis ###
-        self.cfg = self._read_ini(path=self.base_path)
-
-        if self.user_path:
-            self.user = self._read_ini(self.user_path)
-
-            # update default ini with user ini
-
-            for sec_name, sec in self.user.sections.items():
-                for opt_key, opt in sec.options.items():
-                    if (
-                        sec_name in self.cfg.sections
-                        and opt_key in self.cfg.sections[sec_name].options
-                    ):
-                        self.cfg.sections[sec_name].options[opt_key] = opt
-
-        # initialize section metas
-        for name, section in self._smartini_section_metas:
-            setattr(self, name, section(self.cfg.sections[SectionName(section._name)]))
+    @copy_doc(_get_sections)
+    def get_sections(self, *args, **kwargs) -> ...:
+        return self._get_sections(*args, **kwargs)
 
     def _read_ini(
         self,
         path: str | Path,
-    ) -> IniProxy:
-        """Read an ini file.
+        parameters: Parameters | None = None,
+        parameters_as_default: bool = False,
+        **kwargs,
+    ) -> None:
+        """Read an ini file. If no parameters are passed (as Parameters object or kwargs),
+        default parameters defined on initialization will be used.
 
         Args:
             path (str | Path): Path to the ini file.
+            parameters (Parameters | None, optional): Parameters for reading and
+                writing inis, as an Parameters object. Parameters can also be passed
+                as kwargs. Missing parameters (because parameters is None and no or not
+                enough kwargs are passed) will be taken from default Parameters that
+                were defined on initialization. Defaults to None.
+            parameters_as_default (bool, optional): Whether to save the parameters for
+                this read as default parameters. Defaults to False.
+            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
         """
-        parsed_ini: IniProxy = IniProxy()
+        # define parameters
+        if parameters is None:
+            # take parameters from copy of self._parameters
+            parameters = self._default_parameters
+        if kwargs:
+            parameters = dataclass_replace(parameters, **kwargs)
+        if parameters_as_default:
+            self._default_parameters = parameters
+
+        empty_entity = r"[\s\t]*" if parameters.ignore_whitespace_lines else r""
 
         with open(path, "r") as file:
             file_content = file.read()
 
+        current_option: Option | None = None
+        current_section = self._get_unnamed_section(parameters)
+
         # split into entities
         entities = split(
-            (self.entity_delimiter),
+            parameters.entity_delimiter,
             file_content,
         )
 
-        current_section: SectionProxy | None = None
-        last_option: Option | None = None
-
         for entity_index, entity_content in enumerate(entities):
 
-            # check for continuation
-            possible_continuation = (
-                last_option
-                and self.continuation_allowed
-                and (
-                    continuation := search(
-                        rf"(?<=^{self.continuation_prefix_regex}).*", entity_content
-                    )
+            if possible_continuation := (
+                self._check_for_possible_continuation(
+                    entity_content, current_option, parameters
                 )
-            )
+            ):
+                entity_content = possible_continuation
+            possible_continuation = False if possible_continuation is None else True
 
-            if possible_continuation:
-                # remove continuation prefix from entity content
-                entity_content = continuation[0]
-
-            if fullmatch(self.empty_entity, entity_content):
+            if fullmatch(empty_entity, entity_content):
                 # empty entity, skip and close off last option
-                last_option = None
+                current_option = None
                 continue
 
-            # extract entity
-            gates = (SectionName, Option, Comment)
-            extractors = (
-                lambda x: SectionName(name_with_brackets=x),
-                lambda x: Option(delimiter=self.option_delimiters, from_string=x),
-                lambda x: Comment(prefix=self.comment_prefixes, content_with_prefix=x),
+            # try to extract section
+            if (
+                not possible_continuation
+                or "section" not in parameters.continuation_ignore
+            ):
+                if extracted_section_name := self._extract_section_name(entity_content):
+                    current_section = self._handle_section_name(
+                        extracted_section_name, parameters
+                    )
+                    continue
+
+            if current_section is None:
+                # we need a last section to extract options and comments
+                continue
+
+            extracted_entity = self._extract_option_comment(
+                entity_content, current_section, possible_continuation, parameters
             )
 
-            extracted_entity = entity_content
-
-            for gate, Extractor in zip(gates, extractors):
-                # extractors are only called if set before
-                if not possible_continuation or gate not in self.continuation_ignore:
-                    try:
-                        extracted_entity = Extractor(entity_content)
-                    except ExtractionError:
-                        continue
-                    break
-
-            # Handling section names
-
-            if isinstance(extracted_entity, SectionName):
-                if extracted_entity in parsed_ini.sections:
-                    # section already parsed. add to it.
-                    current_section = parsed_ini.sections[extracted_entity]
-                else:
-                    # new section
-                    current_section = SectionProxy(name=extracted_entity)
-                    parsed_ini.sections[extracted_entity] = current_section
-                continue
-
-            # Handling continuations
-
-            if isinstance(extracted_entity, str):
-                # processed line is just a string, therefore possible continuation
-                # of latest option's value
-
-                if not last_option:
+            if isinstance(extracted_entity, Option):
+                current_option = extracted_entity
+            elif not extracted_entity:
+                # possible continuation
+                if not current_option:
                     # no last option (e.g. empty line after the last one)
                     raise IniStructureError(
-                        f"line {entity_index} could not be assigned to a key"
+                        f"line {entity_index} could not be assigned to a key."
                     )
-                if not self.continuation_allowed:
+                if not parameters.continuation_allowed:
                     raise ContinuationError(
-                        f"line {entity_index} is continuation but continuation is not allowed"
+                        f"line {entity_index} is continuation but continuation is not allowed."
                     )
                 if not possible_continuation:
                     raise ContinuationError(
-                        f"line {entity_index} doesn't follow continuation rules"
+                        f"line {entity_index} doesn't follow continuation rules."
                     )
+                self._handle_continuation(entity_content, current_option)
 
-                # add continuation to last option
-                if not isinstance(last_option.value, list):
-                    last_option.value = [last_option.value]
-                last_option.value.append(extracted_entity)
-                continue
+    @copy_doc(_read_ini)
+    def read_ini(self, *args, **kwargs) -> ...:
+        return self._read_ini(*args, **kwargs)
 
-            # handling comments and options
+    def _check_for_possible_continuation(
+        self, entity: str, current_option: Option | None, parameters: Parameters
+    ) -> str | None:
+        """Check if entity is a possible continuation and remove the continuation prefix
+        from the entity.
 
-            if not current_section:
-                # processed line is a sectionless comment or option
-                current_section = SectionProxy(name=None)
-                parsed_ini.sections[None] = current_section
+        Args:
+            entity (str): The entity to check.
+            current_option (Option | None): The current option.
+            parameters (Parameters): Ini read and write parameters.
 
-            # add comment or option to current section's structure
-            current_section.structure.append(extracted_entity)
+        Returns:
+            str | None: The entity with the continuation prefix removed (if
+            possible continuation) or None if entity is no possible continuation.
+        """
+        if parameters.continuation_allowed and current_option:
+            # if no last option it can't be a continuation
+            if continuation := self._extract_continuation(entity, parameters):
+                return continuation
+        return None
 
-            if isinstance(extracted_entity, Option):
-                # add option to current section's options
-                last_option = extracted_entity
-                current_section.options[extracted_entity.key] = extracted_entity
+    def _extract_option_comment(
+        self,
+        entity: str,
+        current_section: Section | None,
+        possible_continuation: bool,
+        parameters: Parameters,
+    ) -> Option | Comment | None:
+        """Extract Option or Comment from entity.
 
-        return parsed_ini
+        Args:
+            entity (str): Entity to use for extraction.
+            current_section (Section | None): Current section.
+            possible_continuation (bool): Whether entity is possible continuation.
+            parameters (Parameters): Ini read and write parameters.
+
+        Returns:
+            Option | Comment | None: Option if option present in entity, Comment if
+                comment present, None if neither.
+        """
+        # get extractors
+        extractors = {
+            "option": self._extract_and_add_option,
+            "comment": self._extract_and_add_comment,
+        }
+        if possible_continuation:
+            extractors = {
+                k: v
+                for k, v in extractors.items()
+                if k not in parameters.continuation_ignore
+            }
+        # extract
+        for Extractor in extractors.values():
+            with contextlib.suppress(ExtractionError):
+                return Extractor(
+                    entity=entity,
+                    parameters=parameters,
+                    section=current_section,
+                )
+        return None
+
+    def _extract_section_name(self, entity: str) -> SectionName | None:
+        """Extract a section name if present in entity.
+
+        Args:
+            entity (str): The entity to extract the section from.
+
+        Returns:
+            SectionName | None: The extracted section name or None if extraction
+                wasn't possible.
+        """
+        try:
+            return SectionName(name_with_brackets=entity)
+        except ExtractionError:
+            return None
+
+    def _handle_section_name(
+        self, extracted_section_name: SectionName, parameters: Parameters
+    ) -> Section | None:
+        """Handle a SectionName (add new section if necessary).
+
+        Args:
+            section_name (SectionName): The extracted section name.
+            parameters (Parameters): Ini read and write parameters.
+
+        Returns:
+            Section | None: The section belonging to the extracted SectionName or None
+                if no section belongs to it (i.e. no section could be created because
+                of Parameters).
+        """
+
+        # check if Section exists in schema
+        section_var, section = next(
+            (
+                (var, val)
+                for var, val in vars(self.__class__).items()
+                if isinstance(val, (Section, _SectionMeta))
+                and getattr(val, SECTION_NAME_VARIABLE) == extracted_section_name
+            ),
+            (None, None),
+        )
+        if section_var and section:
+            if isinstance(section, _SectionMeta):
+                # section is defined but not yet initialized. do so.
+                section = section()
+                setattr(self, section_var, section)
+        elif parameters.read_undefined in (True, "section"):
+            # undefined section
+            valid_varname = self._str_to_var(extracted_section_name)
+            section = UndefinedSection(extracted_section_name)
+            setattr(self, valid_varname, section)
+        else:
+            # section is not defined and undefined sections are not allowed, thus
+            section = None
+
+        return section
+
+    def _extract_and_add_option(
+        self, entity: str, parameters: Parameters, section: Section
+    ) -> Option:
+        """Extract an option if present in entity and add it if necessary.
+
+        Args:
+            entity (str): The entity to extract the section from.
+            parameters (Parameters): Ini read and write parameters.
+            section (Section): The section to add the option to.
+
+        Raises:
+            ExtractionError: If no option present in entity.
+
+        Returns:
+            Option: The extracted option.
+        """
+        try:
+            extracted_option = Option(
+                delimiter=parameters.option_delimiters, from_string=entity
+            )
+        except ExtractionError as e:
+            raise ExtractionError from e
+
+        # check if Option is defined
+        if option := next(
+            (
+                val
+                for val in vars(section).values()
+                if isinstance(val, Option) and val.key == extracted_option.key
+            ),
+            None,
+        ):
+            option.value = extracted_option.value
+            return option
+        elif parameters.read_undefined in (True, "option"):
+            # create UndefinedOption
+            option = UndefinedOption(extracted_option)
+            option_varname = self._str_to_var(option.key)
+            setattr(section, option_varname, option)
+        else:
+            raise ExtractionError(
+                f"Option '{extracted_option.key}' is undefined but undefined options are not allowed."
+            )
+
+        return option
+
+    def _extract_and_add_comment(
+        self, entity: str, parameters: Parameters, section: Section
+    ) -> Comment:
+        """Extract an comment if present in entity and add it if necessary.
+
+        Args:
+            entity (str): The entity to extract the section from.
+            parameters (Parameters): Ini read and write parameters.
+            section (Section): The section to add the comment to.
+
+        Raises:
+            ExtractionError: If no comment present in entity.
+
+        Returns:
+            Comment: The extracted comment.
+        """
+        try:
+            extracted_comment = Comment(
+                prefix=parameters.comment_prefixes, content_with_prefix=entity
+            )
+        except ExtractionError as e:
+            raise ExtractionError from e
+
+        setattr(
+            section,
+            self._get_next_comment_var(section),
+            extracted_comment,
+        )
+
+        return extracted_comment
+
+    def _extract_continuation(self, entity: str, parameters: Parameters) -> str | None:
+        """Extract a possible continuation from an entity.
+
+        Args:
+            entity (str): The entity.
+            parameters (Parameters): Read and write ini parameters.
+
+        Returns:
+            str: The continuation or None if continuation was not found.
+        """
+        continuation = search(rf"(?<=^{parameters.continuation_prefix}).*", entity)
+        return None if continuation is None else continuation[0]
+
+    def _handle_continuation(self, continuation: str, last_option: Option) -> None:
+        """Handles a continutation (adds it to the last option).
+
+        Args:
+            continuation (str): The continuation.
+            last_option (Option): The last option to add the continuation to.
+        """
+        # add continuation to last option
+        if not isinstance(last_option.value, list):
+            last_option.value = [last_option.value]
+        last_option.value.append(continuation)
+
+    def _get_unnamed_section(self, parameters: Parameters) -> Section | None:
+        """Get the unnamed section (always at the beginning of the ini).
+
+        Args:
+            parameters (Parameters): Ini read and write parameters.
+
+        Returns:
+            Section | None: The unnamed section or None if unnamed section undefinied
+                and not allowed.
+        """
+        # check if unnamed section is in schema else create UndefinedSection
+        varname, schema = next(
+            (
+                (var, val)
+                for var, val in vars(self.__class__).items()
+                if isinstance(val, _SectionMeta)
+                and getattr(val, SECTION_NAME_VARIABLE) is None
+            ),
+            (None, None),
+        )
+        if varname and schema:
+            section = schema()
+            setattr(self, varname, section)
+        elif parameters.read_undefined in (True, "section"):
+            section = UndefinedSection(section_name=None)
+            setattr(self, UNNAMED_SECTION_NAME, section)
+        else:
+            section = None
+
+        return section
+
+    def _get_next_comment_var(self, section: Section) -> str:
+        """Get the variable name for the next comment.
+
+        Args:
+            section (Section): The section the comment belongs to.
+
+        Returns:
+            str: The variable name of the next comment.
+        """
+        comment_ids = sorted(
+            int(cid[0])
+            for var, val in vars(section).items()
+            if isinstance(val, Comment)
+            and (cid := search(rf"(?<=^{COMMENT_VAR_PREFIX})\d+$", var))
+        )
+        return str(comment_ids[-1] + 1 if comment_ids else 0)
+
+    def _str_to_var(self, string: str) -> str:
+        """Convert a string to a valid python variable name.
+
+        Args:
+            string (str): The string to convert.
+
+        Returns:
+            str: The valid variable name.
+        """
+        return sub(
+            rf"^(?=\d|{INTERNAL_PREFIX})", VARIABLE_PREFIX, sub(r"\W", "_", string)
+        )
