@@ -1,17 +1,18 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
+from typing import Any, Literal, overload
+from typing_extensions import Self
+import itertools
+import re
 from pathlib import Path
 from dataclasses import replace as dataclass_replace
-import contextlib
-from typing import Any, Literal, overload, Callable
 from src.exceptions import (
     ContinuationError,
     IniStructureError,
     ExtractionError,
-    UndefinedSectionError,
 )
-from src.entities import Comment, Option, SectionName, UndefinedOption
+from src.entities import Comment, Option, SectionName, UndefinedOption, Slot
 from src.args import Parameters
 from src.globals import (
     COMMENT_VAR_PREFIX,
@@ -19,9 +20,8 @@ from src.globals import (
     SECTION_NAME_VARIABLE,
     INTERNAL_PREFIX,
     INTERNAL_PREFIX_IN_WORDS,
-    VARIABLE_PREFIX,
 )
-from re import search, split, fullmatch, sub
+from src.utils import _str_to_var
 from nomopytools.func import copy_doc
 
 
@@ -61,7 +61,7 @@ class Section(metaclass=_SectionMeta):
             # every string variable without leading INTERNAL_PREFIX
             # will be interpreted as an option
             if (
-                not fullmatch(r"^__.*__$", var)
+                not re.fullmatch(r"^__.*__$", var)
                 and isinstance(val, str)
                 and var != SECTION_NAME_VARIABLE
             ):
@@ -76,18 +76,136 @@ class Section(metaclass=_SectionMeta):
         attr = super().__getattribute__(__name)
         return attr.value if isinstance(attr, Option) else attr
 
+    @overload
+    def _get_option(self, name: str = ..., key: ... = ...) -> ...: ...
 
+    @overload
+    def _get_option(self, name: None = ..., key: str = ...) -> ...: ...
+
+    def _get_option(self, name: str | None = None, key: str | None = None) -> Option:
+        """Get an option by variable name or option key.
+
+        Args:
+            name (str | None, optional): Name of the option variable. Defaults to None.
+            key (str | None, optional): The option key. Defaults to None.
+        Returns:
+            Option: The requested option.
+        """
+        if name is not None:
+            attr = super().__getattribute__(name)
+            if not isinstance(attr, Option):
+                raise ValueError(
+                    f"{name} is no known option of section '{getattr(self,SECTION_NAME_VARIABLE)}'."
+                )
+            return attr
+        elif key is not None:
+            option = next(
+                (
+                    val
+                    for val in vars(self).values()
+                    if isinstance(val, Option) and val.key == key
+                ),
+                None,
             )
-            if var is None:
+            if option is None:
                 raise NameError(
                     f"'{key}' is not a known key of any option in section '{getattr(self,SECTION_NAME_VARIABLE)}'"
                 )
-            option = var
-        match cfg:
-            case "auto":
-                setattr(self, option, value)
-            case "base":
-                super().__getattribute__(option)
+            return option
+        raise ValueError("name or key must be provided.")
+
+    @overload
+    def _set_option(
+        self,
+        name: str,
+        value: ...,
+        slot: ... = ...,
+        key: ... = ...,
+    ) -> None: ...
+    @overload
+    def _set_option(
+        self,
+        name: None,
+        value: ...,
+        slot: ... = ...,
+        key: str = ...,
+    ) -> None: ...
+
+    def _set_option(
+        self,
+        name: str | None,
+        value: str,
+        slot: Slot = "auto",
+        key: str | None = None,
+    ) -> None:
+        """Set an option's value by accessing it via variable name or option key.
+
+        Args:
+            name (str | None): The variable name of the option. Must be None if key
+                should be used.
+            value (str): The value to set the option to.
+            slot ("auto", "base", "user", optional): The slot to use. If "auto" will use
+                default Option behaviour. Defaults to "auto".
+            key (str | None, optional): The option key. Defaults to None.
+        """
+        option = self._get_option(name, key)
+        option.set_value(value, slot)
+
+    def _add_undefined_option(
+        self, option: UndefinedOption | Option | None = None, **option_kwargs
+    ) -> UndefinedOption:
+        """Add a new undefined option to the section.
+
+        Args:
+            option (UndefinedOption | Option | None, optional): The option to add.
+                Has to be None if kwargs should be used. Defaults to None.
+            **option_kwargs: Keyword arguments for option initialization.
+
+        Returns:
+            UndefinedOption: The newly created undefined option.
+        """
+        if not option:
+            option = UndefinedOption(**option_kwargs)
+        elif isinstance(option, Option):
+            option = UndefinedOption(option)
+        option_varname = _str_to_var(option.key)
+        # add undefined option to section
+        setattr(self, option_varname, option)
+        return option
+
+    def _add_comment(self, comment: Comment | None = None, **comment_kwargs) -> Comment:
+        """Add a new comment to the section.
+
+        Args:
+            comment (Comment | None, optional): The comment to add. Must be None if
+                kwargs should be used. Defaults to None.
+            **comment_kwargs: Keyword arguments for Comment initialization.
+
+        Returns:
+            Comment: The newly added comment.
+        """
+        if not comment:
+            comment = Comment(**comment_kwargs)
+        setattr(
+            self,
+            self._get_next_comment_var(),
+            comment,
+        )
+        return comment
+
+    def _get_next_comment_var(self) -> str:
+        """Get the variable name for the next comment.
+
+        Returns:
+            str: The variable name of the next comment.
+        """
+        comment_ids = sorted(
+            int(cid[0])
+            for var, val in vars(self).items()
+            if isinstance(val, Comment)
+            and (cid := re.search(rf"(?<=^{COMMENT_VAR_PREFIX})\d+$", var))
+        )
+        return str(comment_ids[-1] + 1 if comment_ids else 0)
 
 
 class UndefinedSection(Section):
@@ -144,6 +262,38 @@ class Schema(metaclass=_SchemaMeta):
             parameters = dataclass_replace(parameters, **kwargs)
         self._default_parameters = parameters
 
+    @property
+    def _user(self) -> Self:
+        """Gives access to option values in the user slot."""
+        return SlotProxy(target=self, slot="user")
+
+    @property
+    def user(self) -> Self:
+        """Gives access to option values in the user slot."""
+        return self._user
+
+    @property
+    def _base(self) -> Self:
+        """Gives access to option values in the base slot."""
+        return SlotProxy(target=self, slot="base")
+
+    @property
+    def base(self) -> Self:
+        """Gives access to option values in the base slot."""
+        return self._base
+
+    def _with_slot(self, slot: Literal["base", "user"]) -> Self:
+        """Access the ini using a specific slot.
+
+        Args:
+            slot ("base" | "user"): The slot to use.
+        """
+        return getattr(self, slot)
+
+    @copy_doc(_with_slot)
+    def with_slot(self, *args, **kwargs) -> ...:
+        return self._with_slot(*args, **kwargs)
+
     def _get_sections(self) -> dict[str, Section]:
         """Get all sections of the ini.
 
@@ -161,6 +311,7 @@ class Schema(metaclass=_SchemaMeta):
         self,
         path: str | Path,
         parameters: Parameters | None = None,
+        slot: Slot = "auto",
         parameters_as_default: bool = False,
         **kwargs,
     ) -> None:
@@ -174,6 +325,8 @@ class Schema(metaclass=_SchemaMeta):
                 as kwargs. Missing parameters (because parameters is None and no or not
                 enough kwargs are passed) will be taken from default Parameters that
                 were defined on initialization. Defaults to None.
+            slot ("auto" | "base" | "user", optional): Slot to save option values in.
+                If "auto", will use Option default behavior. Defaults to "auto".
             parameters_as_default (bool, optional): Whether to save the parameters for
                 this read as default parameters. Defaults to False.
             **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
@@ -187,8 +340,6 @@ class Schema(metaclass=_SchemaMeta):
         if parameters_as_default:
             self._default_parameters = parameters
 
-        empty_entity = r"[\s\t]*" if parameters.ignore_whitespace_lines else r""
-
         with open(path, "r") as file:
             file_content = file.read()
 
@@ -196,22 +347,20 @@ class Schema(metaclass=_SchemaMeta):
         current_section = self._get_unnamed_section(parameters)
 
         # split into entities
-        entities = split(
+        entities = re.split(
             parameters.entity_delimiter,
             file_content,
         )
 
         for entity_index, entity_content in enumerate(entities):
 
-            if possible_continuation := (
+            entity_content, possible_continuation = (
                 self._check_for_possible_continuation(
                     entity_content, current_option, parameters
                 )
-            ):
-                entity_content = possible_continuation
-            possible_continuation = False if possible_continuation is None else True
+            )
 
-            if fullmatch(empty_entity, entity_content):
+            if self._is_empty_entity(entity_content, parameters):
                 # empty entity, skip and close off last option
                 current_option = None
                 continue
@@ -228,31 +377,45 @@ class Schema(metaclass=_SchemaMeta):
                     continue
 
             if current_section is None:
-                # we need a last section to extract options and comments
+                # we need a current section to extract options and comments
                 continue
 
-            extracted_entity = self._extract_option_comment(
-                entity_content, current_section, possible_continuation, parameters
-            )
+            # try to extract option
+            if (
+                not possible_continuation
+                or "option" not in parameters.continuation_ignore
+            ):
+                if option := self._extract_option(entity_content, parameters):
+                    if handled_option := self._handle_option(
+                        option, parameters, current_section, slot
+                    ):
+                        current_option = handled_option
+                        continue
 
-            if isinstance(extracted_entity, Option):
-                current_option = extracted_entity
-            elif not extracted_entity:
-                # possible continuation
-                if not current_option:
-                    # no last option (e.g. empty line after the last one)
-                    raise IniStructureError(
-                        f"line {entity_index} could not be assigned to a key."
-                    )
-                if not parameters.continuation_allowed:
-                    raise ContinuationError(
-                        f"line {entity_index} is continuation but continuation is not allowed."
-                    )
-                if not possible_continuation:
-                    raise ContinuationError(
-                        f"line {entity_index} doesn't follow continuation rules."
-                    )
-                self._handle_continuation(entity_content, current_option)
+            # try to extract comment
+            if (
+                not possible_continuation
+                or "comment" not in parameters.continuation_ignore
+            ):
+                if comment := self._extract_comment(entity_content, parameters):
+                    self._handle_comment(comment, current_section)
+                    continue
+
+            # possible continuation
+            if not current_option:
+                # no last option (e.g. empty line after the last one)
+                raise IniStructureError(
+                    f"line {entity_index} could not be assigned to a key."
+                )
+            if not parameters.continuation_allowed:
+                raise ContinuationError(
+                    f"line {entity_index} is continuation but continuation is not allowed."
+                )
+            if not possible_continuation:
+                raise ContinuationError(
+                    f"line {entity_index} doesn't follow continuation rules."
+                )
+            self._handle_continuation(entity_content, current_option)
 
     @copy_doc(_read_ini)
     def read_ini(self, *args, **kwargs) -> ...:
@@ -260,7 +423,7 @@ class Schema(metaclass=_SchemaMeta):
 
     def _check_for_possible_continuation(
         self, entity: str, current_option: Option | None, parameters: Parameters
-    ) -> str | None:
+    ) -> tuple[str, bool]:
         """Check if entity is a possible continuation and remove the continuation prefix
         from the entity.
 
@@ -270,54 +433,16 @@ class Schema(metaclass=_SchemaMeta):
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
-            str | None: The entity with the continuation prefix removed (if
-            possible continuation) or None if entity is no possible continuation.
+            tuple[str, bool]: The entity with the continuation prefix removed (if
+            possible continuation) and a boolean indicating if the entity is a possible
+            continuation.
         """
+        continuation = None
         if parameters.continuation_allowed and current_option:
             # if no last option it can't be a continuation
-            if continuation := self._extract_continuation(entity, parameters):
-                return continuation
-        return None
-
-    def _extract_option_comment(
-        self,
-        entity: str,
-        current_section: Section | None,
-        possible_continuation: bool,
-        parameters: Parameters,
-    ) -> Option | Comment | None:
-        """Extract Option or Comment from entity.
-
-        Args:
-            entity (str): Entity to use for extraction.
-            current_section (Section | None): Current section.
-            possible_continuation (bool): Whether entity is possible continuation.
-            parameters (Parameters): Ini read and write parameters.
-
-        Returns:
-            Option | Comment | None: Option if option present in entity, Comment if
-                comment present, None if neither.
-        """
-        # get extractors
-        extractors = {
-            "option": self._extract_and_add_option,
-            "comment": self._extract_and_add_comment,
-        }
-        if possible_continuation:
-            extractors = {
-                k: v
-                for k, v in extractors.items()
-                if k not in parameters.continuation_ignore
-            }
-        # extract
-        for Extractor in extractors.values():
-            with contextlib.suppress(ExtractionError):
-                return Extractor(
-                    entity=entity,
-                    parameters=parameters,
-                    section=current_section,
-                )
-        return None
+            continuation = self._extract_continuation(entity, parameters)
+        is_continuation = continuation is not None
+        return (continuation if is_continuation else entity, is_continuation)
 
     def _extract_section_name(self, entity: str) -> SectionName | None:
         """Extract a section name if present in entity.
@@ -326,8 +451,8 @@ class Schema(metaclass=_SchemaMeta):
             entity (str): The entity to extract the section from.
 
         Returns:
-            SectionName | None: The extracted section name or None if extraction
-                wasn't possible.
+            SectionName | None: The extracted section name or None if no section name
+                was found in entity.
         """
         try:
             return SectionName(name_with_brackets=entity)
@@ -337,7 +462,7 @@ class Schema(metaclass=_SchemaMeta):
     def _handle_section_name(
         self, extracted_section_name: SectionName, parameters: Parameters
     ) -> Section | None:
-        """Handle a SectionName (add new section if necessary).
+        """Handle an extracted SectionName (add new section if necessary).
 
         Args:
             section_name (SectionName): The extracted section name.
@@ -353,7 +478,9 @@ class Schema(metaclass=_SchemaMeta):
         section_var, section = next(
             (
                 (var, val)
-                for var, val in vars(self.__class__).items()
+                for var, val in itertools.chain(
+                    vars(self).items(), vars(self.__class__).items()
+                )
                 if isinstance(val, (Section, _SectionMeta))
                 and getattr(val, SECTION_NAME_VARIABLE) == extracted_section_name
             ),
@@ -366,7 +493,7 @@ class Schema(metaclass=_SchemaMeta):
                 setattr(self, section_var, section)
         elif parameters.read_undefined in (True, "section"):
             # undefined section
-            valid_varname = self._str_to_var(extracted_section_name)
+            valid_varname = _str_to_var(extracted_section_name)
             section = UndefinedSection(extracted_section_name)
             setattr(self, valid_varname, section)
         else:
@@ -375,94 +502,99 @@ class Schema(metaclass=_SchemaMeta):
 
         return section
 
-    def _extract_and_add_option(
-        self, entity: str, parameters: Parameters, section: Section
-    ) -> Option:
-        """Extract an option if present in entity and add it if necessary.
+    def _extract_option(self, entity: str, parameters: Parameters) -> Option | None:
+        """Extract an option if present in entity.
 
         Args:
             entity (str): The entity to extract the section from.
             parameters (Parameters): Ini read and write parameters.
             section (Section): The section to add the option to.
 
-        Raises:
-            ExtractionError: If no option present in entity.
-
         Returns:
-            Option: The extracted option.
+            Option | None: The extracted option or None if no option was found in entity.
         """
         try:
-            extracted_option = Option(
-                delimiter=parameters.option_delimiters, from_string=entity
-            )
-        except ExtractionError as e:
-            raise ExtractionError from e
+            return Option(delimiter=parameters.option_delimiters, from_string=entity)
+        except ExtractionError:
+            return None
 
+    def _handle_option(
+        self,
+        extracted_option: Option,
+        parameters: Parameters,
+        section: Section,
+        slot: Slot = "auto",
+    ) -> Option | None:
+        """Handle an extracted Option.
+
+        Args:
+            extracted_option (Option): Extracted option to handle.
+            parameters (Parameters): Ini read and write parameters.
+            section (Section): The section to add the option to.
+            slot ("auto" | "base" | "user", optional): Slot to save the option value in.
+                If "auto", will use Option default behavior. Defaults to "auto".
+
+        Returns:
+            Option | None: The final Option in the section (differs from input) or None
+                if Option could not be handled (e.g. due to undefined and undefined not
+                allowed in parameters).
+        """
         # check if Option is defined
-        if option := next(
-            (
-                val
-                for val in vars(section).values()
-                if isinstance(val, Option) and val.key == extracted_option.key
-            ),
-            None,
-        ):
-            option.value = extracted_option.value
-            return option
-        elif parameters.read_undefined in (True, "option"):
-            # create UndefinedOption
-            option = UndefinedOption(extracted_option)
-            option_varname = self._str_to_var(option.key)
-            setattr(section, option_varname, option)
-        else:
-            raise ExtractionError(
-                f"Option '{extracted_option.key}' is undefined but undefined options are not allowed."
-            )
+        try:
+            option = section._get_option(key=extracted_option.key)
+        except NameError:
+            if parameters.read_undefined in (True, "option"):
+                # create UndefinedOption
+                option = section._add_undefined_option(
+                    key=extracted_option.key, delimiter=extracted_option.delimiter
+                )
+            else:
+                return None
+
+        # set option value
+        option.set_value(extracted_option.value, slot)
 
         return option
 
-    def _extract_and_add_comment(
-        self, entity: str, parameters: Parameters, section: Section
-    ) -> Comment:
-        """Extract an comment if present in entity and add it if necessary.
+    def _extract_comment(self, entity: str, parameters: Parameters) -> Comment | None:
+        """Extract an comment if present in entity.
 
         Args:
             entity (str): The entity to extract the section from.
             parameters (Parameters): Ini read and write parameters.
-            section (Section): The section to add the comment to.
-
-        Raises:
-            ExtractionError: If no comment present in entity.
 
         Returns:
-            Comment: The extracted comment.
+            Comment | None: The extracted comment or None if no comment
+                was found in entity.
         """
         try:
-            extracted_comment = Comment(
+            return Comment(
                 prefix=parameters.comment_prefixes, content_with_prefix=entity
             )
-        except ExtractionError as e:
-            raise ExtractionError from e
+        except ExtractionError:
+            return None
 
-        setattr(
-            section,
-            self._get_next_comment_var(section),
-            extracted_comment,
-        )
+    def _handle_comment(self, extracted_comment: Comment, section: Section) -> None:
+        """Handle an extracted Comment (add it to a section).
 
-        return extracted_comment
+        Args:
+            extracted_comment (Comment): Extracted comment to handle.
+            section (Section): The section to add the comment to.
+
+        """
+        section._add_comment(extracted_comment)
 
     def _extract_continuation(self, entity: str, parameters: Parameters) -> str | None:
         """Extract a possible continuation from an entity.
 
         Args:
             entity (str): The entity.
-            parameters (Parameters): Read and write ini parameters.
+            parameters (Parameters): Ini read and write parameters.
 
         Returns:
             str: The continuation or None if continuation was not found.
         """
-        continuation = search(rf"(?<=^{parameters.continuation_prefix}).*", entity)
+        continuation = re.search(rf"(?<=^{parameters.continuation_prefix}).*", entity)
         return None if continuation is None else continuation[0]
 
     def _handle_continuation(self, continuation: str, last_option: Option) -> None:
@@ -508,32 +640,50 @@ class Schema(metaclass=_SchemaMeta):
 
         return section
 
-    def _get_next_comment_var(self, section: Section) -> str:
-        """Get the variable name for the next comment.
+    def _is_empty_entity(self, entity: str, parameters: Parameters) -> bool:
+        """Check whether an entity qualifies as empty.
 
         Args:
-            section (Section): The section the comment belongs to.
+            entity (str): The entity to check.
+            parameters (Parameters): Ini read and write parameters.
 
         Returns:
-            str: The variable name of the next comment.
+            bool: Whether the entity is empty.
         """
-        comment_ids = sorted(
-            int(cid[0])
-            for var, val in vars(section).items()
-            if isinstance(val, Comment)
-            and (cid := search(rf"(?<=^{COMMENT_VAR_PREFIX})\d+$", var))
+        return bool(
+            re.fullmatch(
+                r"[\s\t]*" if parameters.ignore_whitespace_lines else r"", entity
+            )
         )
-        return str(comment_ids[-1] + 1 if comment_ids else 0)
 
-    def _str_to_var(self, string: str) -> str:
-        """Convert a string to a valid python variable name.
+
+class SlotProxy:
+
+    def __init__(
+        self,
+        target: Schema | Section,
+        slot: Literal["base", "user"],
+    ) -> None:
+        """Gives access to a specific slot.
 
         Args:
-            string (str): The string to convert.
-
-        Returns:
-            str: The valid variable name.
+            target (Schema | Section): The target to prepare for slot access.
+            slot ("base", "user"): The slot to access.
         """
-        return sub(
-            rf"^(?=\d|{INTERNAL_PREFIX})", VARIABLE_PREFIX, sub(r"\W", "_", string)
-        )
+        super().__setattr__("_target", target)
+        super().__setattr__("_slot", slot)
+
+    def __getattribute__(self, name: str) -> Any:
+        target = super().__getattribute__("_target")
+        slot = super().__getattribute__("_slot")
+        if isinstance(target, Schema):
+            return SlotProxy(target=getattr(target, name), slot=slot)
+        elif isinstance(target, Section):
+            return target._get_option(name).get_value(slot)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        target = super().__getattribute__("_target")
+        slot = super().__getattribute__("_slot")
+        if not isinstance(target, Section):
+            raise AttributeError("Assignment only valid for options.")
+        target._set_option(name=name, value=value, slot=slot)

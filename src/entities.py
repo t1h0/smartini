@@ -1,11 +1,13 @@
 """Ini entities are either a section name, an option or a comment."""
 
-from typing import overload, Any
+from typing import overload, Any, Literal
 from typing_extensions import Self
 from re import split, escape, search, sub
 from src.exceptions import ExtractionError
 from src.args import RawRegex
 from dataclasses import dataclass
+
+Slot = Literal["auto", "base", "user"]
 
 
 class Comment:
@@ -134,7 +136,8 @@ class Option:
                 raise ValueError(f"key must be string (is {type(key)})")
             self.key = OptionKey(key)
             if isinstance(value, OptionValue):
-                self._value = value
+                self._value = value.base
+                a = "a"
             else:
                 self._value = OptionValue(base=value)
             self.delimiter = delimiter[0] if isinstance(delimiter, tuple) else delimiter
@@ -162,11 +165,41 @@ class Option:
 
     @property
     def value(self) -> Any:
-        return self._value.user if self._value.user is not None else self._value.base
+        return self.get_value(slot="auto")
 
     @value.setter
     def value(self, value: Any) -> None:
-        if self._value.base is None:
+        self.set_value(value, slot="auto")
+
+    def get_value(self, slot: Slot = "auto") -> Any:
+        """Return the Option's value.
+
+        Args:
+            slot ("auto" | "base" | "user", optional): The slot to return the value of.
+                If "auto", will return user if set, otherwise base. Defaults to "auto".
+
+        Returns:
+            Any: The Option's value.
+        """
+        if slot in ("base", "user"):
+            return getattr(self._value, slot)
+        elif self._value.user is not None:
+            return self._value.user
+        else:
+            return self._value.base
+
+    def set_value(self, value: Any, slot: Slot = "auto") -> None:
+        """Set the Option's value.
+
+        Args:
+            value (Any): New value to set the value to.
+            slot ("auto" | "base" | "user", optional): The slot to set the value of.
+                If "auto", will set base if not yet set, otherwise user.
+                Defaults to "auto".
+        """
+        if slot in ("base", "user"):
+            setattr(self._value, slot, value)
+        elif self._value.base is None:
             self._value.base = value
         else:
             self._value.user = value
