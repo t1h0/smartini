@@ -1,13 +1,12 @@
 """Ini entities are either a section name, an option or a comment."""
 
-from typing import overload, Any, Literal
-from typing_extensions import Self
+from typing import overload, Any, Literal, Sequence, Self
+from dataclasses import dataclass
 from re import split, escape, search, sub
 from src.exceptions import ExtractionError
 from src.args import RawRegex
-from dataclasses import dataclass
-
-Slot = Literal["auto", "base", "user"]
+from src import slots
+from nomopytools.func import copy_doc
 
 
 class Comment:
@@ -81,12 +80,10 @@ class OptionKey(str):
     pass
 
 
-@dataclass
-class OptionValue:
-    """An ini option's value."""
-
-    base: Any = None
-    user: Any = None
+@dataclass(slots=True)
+class OptionSlot:
+    value: Any
+    delimiter: str | RawRegex | None
 
 
 class Option:
@@ -122,26 +119,30 @@ class Option:
             key (str | OptionKey | None, optional): The option key. Should be None if
                 from_string is provided, otherwise from_string will be ignored.
                 Defaults to None.
-            value (str | list[str] | None, optional): The option value. Should be None
-                if from_string is provided, otherwise from_string will be ignored.
-                Defaults to None.
+            value (str | list[str] | None, optional): The option value or values
+                (one value per slot). Should be None if from_string is provided,
+                otherwise from_string will be ignored. Defaults to None.
             delimiter (str | tuple[str, ...], None, optional): One or more delimiters
                 that delimit key and value. Defaults to None.
             from_string (str | None, optional): A string containing key, delimiter and
                 value. If provided, key or value argument must be None, otherwise will
                 be ignored. Defaults to None.
         """
+        self.slots: slots.Slots[OptionSlot] = []
         if key is not None:
             if not isinstance(key, str):
                 raise ValueError(f"key must be string (is {type(key)})")
             self.key = OptionKey(key)
-            if isinstance(value, OptionValue):
-                self._value = value.base
-                a = "a"
-            else:
-                self._value = OptionValue(base=value)
-            self.delimiter = delimiter[0] if isinstance(delimiter, tuple) else delimiter
-        elif from_string is not None and delimiter:
+            if value is not None or delimiter is not None:
+                self.slots.append(
+                    OptionSlot(
+                        value=value,
+                        delimiter=(
+                            delimiter[0] if isinstance(delimiter, tuple) else delimiter
+                        ),
+                    )
+                )
+        elif from_string is not None and delimiter is not None:
             if not isinstance(delimiter, tuple):
                 delimiter = (delimiter,)
             # extracting left and right side of delimiter
@@ -158,51 +159,68 @@ class Option:
             ):
                 # taking last word of left side as key
                 self.key = OptionKey(last_key.group(0))
-                self._value = OptionValue(base=lr[1].strip())
-                self.delimiter = delimiter[0]
+                self.slots.append(OptionSlot(lr[1].strip(), delimiter[0]))
             else:
                 raise ExtractionError("Option could not be extracted.")
+        else:
+            raise ExtractionError("Option could not be extracted.")
 
     @property
-    def value(self) -> Any:
-        return self.get_value(slot="auto")
+    def _nslot(self) -> int:
+        """Number of slots for this Option.
 
-    @value.setter
-    def value(self, value: Any) -> None:
-        self.set_value(value, slot="auto")
-
-    def get_value(self, slot: Slot = "auto") -> Any:
-        """Return the Option's value.
-
-        Args:
-            slot ("auto" | "base" | "user", optional): The slot to return the value of.
-                If "auto", will return user if set, otherwise base. Defaults to "auto".
+        Note: Private (undescore) property added for compability with interface objects
+        that have _nslot properties.
 
         Returns:
-            Any: The Option's value.
+            int: The number of slots for this Option.
         """
-        if slot in ("base", "user"):
-            return getattr(self._value, slot)
-        elif self._value.user is not None:
-            return self._value.user
-        else:
-            return self._value.base
+        return len(self.slots)
 
-    def set_value(self, value: Any, slot: Slot = "auto") -> None:
-        """Set the Option's value.
+    @property
+    def nslot(self) -> int:
+        """Number of slots for this Option.
 
-        Args:
-            value (Any): New value to set the value to.
-            slot ("auto" | "base" | "user", optional): The slot to set the value of.
-                If "auto", will set base if not yet set, otherwise user.
-                Defaults to "auto".
+        Returns:
+            int: The number of slots for this Option.
         """
-        if slot in ("base", "user"):
-            setattr(self._value, slot, value)
-        elif self._value.base is None:
-            self._value.base = value
+        return self._nslot
+
+    def set_value(
+        self, value: Any, slot: slots.SlotAccess = None, add_missing_slots=True
+    ) -> None:
+        if isinstance(slot, int):
+            if not -self.nslot <= slot < self.nslot:
+                if add_missing_slots:
+                    self.add_slots(slot - self.nslot + 1)
+                else:
+                    raise IndexError(
+                        f"Slot {slot} can't be accessed because it doesn't exist."
+                    )
+            self[slot] = value
+        elif slot is None:
+            self.slots = [value] * self.nslot
         else:
-            self._value.user = value
+            for s in slot:
+                self[s] = value
+
+    def set_values(self, values: Sequence[Any]) -> None:
+        if len(values) != self.nslot:
+            raise ValueError("One value per slot is required.")
+        for slot, new_value in zip(self.slots, values):
+            slot.value = new_value
+
+    def add_slots(self, n=1) -> None:
+        self.slots.extend(OptionSlot(None, None) for _ in range(n))
+
+    def __getitem__(self, key: int) -> OptionSlot:
+        return self.slots[key]
+
+    def __setitem__(self, key: int, value: Any) -> None:
+        if isinstance(value, OptionSlot):
+            self.slots[key] = value
+        else:
+            self.slots[key].value = value
 
 
 class UndefinedOption(Option):
@@ -212,10 +230,13 @@ class UndefinedOption(Option):
         # convert Option to UndefinedOption if provided
         if len(args) == 1 and not kwargs and isinstance(option := args[0], Option):
             args = ()
+            values, delimiters = zip(
+                *((slot.value, slot.delimiter) for slot in option.slots)
+            )
             kwargs = {
                 "key": option.key,
-                "value": option.value,
-                "delimiter": option.delimiter,
+                "value": values,
+                "delimiter": delimiters,
             }
 
         super().__init__(*args, **kwargs)

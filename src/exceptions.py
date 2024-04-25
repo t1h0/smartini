@@ -18,6 +18,14 @@ class ExtractionError(Exception):
 
     pass
 
+class EntityNotFound(Exception):
+    """Raised when an entity was to be accessed but doesn't exist."""
+    pass
+
+class SlotNotFound(Exception):
+    """Raised when a slot was to be accessed but doesn't exist."""
+    pass    
+
 
 class UndefinedSectionError(Exception):
     """Raised when an undefined section name is encountered"""
