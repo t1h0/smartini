@@ -5,16 +5,21 @@ from typing import Any, Literal, overload, Sequence, Self, Callable
 import itertools
 import re
 from pathlib import Path
-from dataclasses import replace as dataclass_replace
 from src.exceptions import (
     ContinuationError,
     IniStructureError,
     ExtractionError,
     EntityNotFound,
-    SlotNotFound,
+    DuplicateEntityError,
 )
-from src.entities import Comment, Option, SectionName, UndefinedOption
-from src import slots
+from src.entities import (
+    Comment,
+    Option,
+    OptionSlot,
+    SectionName,
+    UndefinedOption,
+)
+from src.slots import SlotAccess, SlotKey, SlotDeciderMethods, Slots, SlotEntity, StructureSlotEntity, Structure
 from src.args import Parameters
 from src.globals import (
     COMMENT_VAR_PREFIX,
@@ -24,9 +29,12 @@ from src.globals import (
     INTERNAL_PREFIX_IN_WORDS,
 )
 from src.utils import _str_to_var
+from . import warn
 from nomopytools.func import copy_doc
 import warnings
 import inspect
+import contextlib
+
 
 class SectionMeta(type):
     """Metaclass for ini configuration file sections. Section names must be specified
@@ -40,31 +48,30 @@ class SectionMeta(type):
         #  make sure it's the initialization call
         if (
             __bases
+            and StructureSlotEntity not in __bases
             and Section in __bases
             and __name != "UndefinedSection"
             and SECTION_NAME_VARIABLE not in __dict
         ):
             raise AttributeError(
-                f"Class '{__name}' must define section name as '{SECTION_NAME_VARIABLE}' class attribute."
+                f"Class '{__name}' must define section name as '{SECTION_NAME_VARIABLE}'"
+                " class attribute."
             )
         return super().__new__(cls, __name, __bases, __dict)
 
-
-class Section(metaclass=SectionMeta):
+class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
 
     # name of the section. must be provided!
     _name: str | None
 
-    Structure = list[Option | Comment]
-
     def __init__(self) -> None:
         """An ini configuration file section. Name of the section must be defined via
-        '_name' class attribute.
+        'name' class attribute.
         """
+        super().__init__()
+        
         # schema_structure contains the initial structure as saved in the schema
-        self._schema_structure: Section.Structure = []
-        # slots contain a structure each containing the order of options and comments
-        self._slots: slots.Slots[Section.Structure] = []
+        self._schema_structure = Structure()
 
         # initialize Options
         for var, val in vars(self.__class__).items():
@@ -77,20 +84,127 @@ class Section(metaclass=SectionMeta):
             ):
                 if var.startswith(INTERNAL_PREFIX):
                     raise NameError(
-                        f"'{var}' is interpreted as an Option but Option variable names "
-                        f"must not start with {INTERNAL_PREFIX_IN_WORDS}."
+                        f"'{var}' is interpreted as an Option but Option variable names"
+                        f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
                     )
                 option = Option(key=val)
                 super().__setattr__(var, option)
                 self._schema_structure.append(option)
+        
+    @overload
+    def _add_entity(
+        self,
+        entity: UndefinedOption | Option,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption: ...
 
-    @property
-    def _nslot(self) -> int:
-        return len(self._slots)
+    @overload
+    def _add_entity(
+        self,
+        entity: Comment,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> Comment: ...
 
-    @property
-    def nslot(self) -> int:
-        return self._nslot
+    def _add_entity(
+        self,
+        entity: UndefinedOption | Option | Comment,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption | Comment:
+        """Add a new entity to the section.
+
+        Args:
+            entity (UndefinedOption | Option | Comment): The entity to add.
+            positions (int | list[int | None], optional): Where to put the entity in
+                the section's structure. Either one position for all slots or a list
+                with one position per slot. Defaults to -1 (append to end in every slot).
+            slots (SlotAccess, optional): Slot(s) to add the entity to.
+                Must match positions. Defaults to None.
+
+        Returns:
+            UndefinedOption | Comment: The newly created entity.
+        """
+        if isinstance(entity, Option):
+
+            # make sure option key doesn't exist already
+            with contextlib.suppress(EntityNotFound):
+                self._get_option(key=entity.key)
+                raise DuplicateEntityError(
+                    f"Option with key '{entity.key}' already exists."
+                )
+
+            if not isinstance(entity, UndefinedOption):
+                entity = UndefinedOption(entity)
+            varname = _str_to_var(entity.key)
+        elif isinstance(entity, Comment):
+            varname = self._get_next_comment_var()
+        else:
+            raise ValueError("Can only add (Undefined)Options or Comments.")
+
+        # add entity to section
+        super().__setattr__(varname, entity)
+
+        # add to structure
+        self._insert_structure_items(entity,positions,slots=slots)
+        
+        return entity
+
+    @overload
+    @classmethod
+    def add_entity(
+        cls,
+        entity: UndefinedOption | Option,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption: ...
+
+    @overload
+    @classmethod
+    def add_entity(
+        cls,
+        entity: Comment,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> Comment: ...
+
+    @classmethod
+    def add_entity(
+        cls,
+        entity: UndefinedOption | Option | Comment,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption | Comment:
+        """Add a new entity to the section.
+
+        Args:
+            entity (UndefinedOption | Option | Comment): The entity to add.
+            positions (int | list[int | None], optional): Where to put the entity in
+                the section's structure. Either one position for all slots or a list
+                with one position per slot. Defaults to -1 (append to end in every slot).
+            slots (SlotAccess, optional): Slot(s) to add the entity to.
+                Must match positions. Defaults to None.
+
+        Returns:
+            UndefinedOption | Comment: The newly created entity.
+        """
+        ...
+    
+    def add_entity(
+        self,
+        entity: UndefinedOption | Option | Comment,
+        positions: int | list[int] = -1,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption | Comment:
+        return self._add_entity(entity,positions,slots=slots)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if isinstance(value, (Option, Comment)):
@@ -99,21 +213,20 @@ class Section(metaclass=SectionMeta):
             )
         super().__setattr__(name, value)
 
-    def _add_slots(self, n: int = 1) -> None:
-        self._slots.extend([] for _ in range(n))
+    @overload
+    def _get_option(self, name: str = ..., key: SlotKey | None = ...) -> Option: ...
 
     @overload
-    def _get_option(self, name: str = ..., key: ... = ...) -> Option: ...
+    def _get_option(self, name: None = ..., key: SlotKey = ...) -> Option: ...
 
-    @overload
-    def _get_option(self, name: None = ..., key: str = ...) -> Option: ...
-
-    def _get_option(self, name: str | None = None, key: str | None = None) -> Option:
+    def _get_option(
+        self, name: str | None = None, key: SlotKey | None = None
+    ) -> Option:
         """Get an option by variable name or option key.
 
         Args:
             name (str | None, optional): Name of the option variable. Defaults to None.
-            key (str | None, optional): The option key. Defaults to None.
+            key (SlotKey | None, optional): The option key. Defaults to None.
         Returns:
             Option: The requested option.
         """
@@ -121,7 +234,8 @@ class Section(metaclass=SectionMeta):
             attr = super().__getattribute__(name)
             if not isinstance(attr, Option):
                 raise EntityNotFound(
-                    f"{name} is no known option of section '{getattr(self,SECTION_NAME_VARIABLE)}'."
+                    f"{name} is no known option of section"
+                    f" '{getattr(self,SECTION_NAME_VARIABLE)}'."
                 )
             return attr
         elif key is not None:
@@ -135,7 +249,8 @@ class Section(metaclass=SectionMeta):
             )
             if option is None:
                 raise EntityNotFound(
-                    f"'{key}' is not a known key of any option in section '{getattr(self,SECTION_NAME_VARIABLE)}'"
+                    f"'{key}' is not a known key of any option in section"
+                    f" '{getattr(self,SECTION_NAME_VARIABLE)}'"
                 )
             return option
         raise ValueError("name or key must be provided.")
@@ -148,142 +263,93 @@ class Section(metaclass=SectionMeta):
     def _set_option(
         self,
         name: str,
-        value: ...,
-        slot: ... = ...,
+        positions: int | list[int | None] | None = None,
         key: ... = ...,
+        *,
+        slots: SlotAccess = None,
+        **kwargs,
     ) -> None: ...
     @overload
     def _set_option(
         self,
         name: None,
-        value: ...,
-        slot: ... = ...,
+        positions: int | list[int | None] | None = None,
         key: str = ...,
+        *,
+        slots: SlotAccess = None,
+        **kwargs,
     ) -> None: ...
 
     def _set_option(
         self,
         name: str | None,
-        value: str,
-        slot: slots.SlotAccess = -1,
+        positions: int | list[int | None] | None = None,
         key: str | None = None,
+        *,
+        slots: SlotAccess = None,
+        **kwargs,
     ) -> None:
         """Set an option's value by accessing it via variable name or option key.
 
         Args:
             name (str | None): The variable name of the option. Must be None if key
                 should be used.
-            value (str): The value to set the option to.
-            slot (int | list[int] | None, optional): The slot to use. Either
-                int for the specific slot or list of slots or None for all slots.
-                Defaults to -1 (latest slot).
+            positions (int | list[int | None] | None): Position in slots the option
+                should take. Either int for same position in all slots or one position
+                per slot. If None and for every slot that None is specified as the
+                position, will take previous position of the Option in the respective
+                slot and will append to slots where Option didn't exist before.
+                Defaults to None.
             key (str | None, optional): The option key. Defaults to None.
+            slots (SlotAccess, optional): The slot to use. Defaults to None (all slots).
+            **kwargs: Keyword-arguments corresponding to OptionSlot attributes.
         """
         if key is None:
             if name is None:
                 raise ValueError("Need name or key for option setting.")
         elif name is not None:
-            warnings.warn("Key passed but name is not None. Taking name instead.")
-        option: Option = self._get_option(name, key)
-        option.set_value(value, slot)
+            warnings.warn("Key passed but name is not None. Taking name.")
+
+        # get slots
+        slots = self._slots.slot_access(slots, verify=True)
+
+        # get option
+        try:
+            option: Option = self._get_option(name, key)
+            # set args
+            # catch manipulation warning because it doesn't apply here
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=warn.slot_manipulation)
+                option._set_slots(slots=slots, add_missing_slots=True, **kwargs)
+        except EntityNotFound:
+            try:
+                option = UndefinedOption(slots=slots, **kwargs)
+            except ExtractionError as ee:
+                raise ValueError(
+                    "Can't add new option because of unsufficient initialization arguemnts."
+                ) from ee
+            option = self._add_entity(option)
+
+        # get position
+        validated_positions = self._validate_position(positions, slots)
+
+        # make sure option is in all requested slot structures
+        # and adjust positions if needed
+        for slot, pos in zip(slots, validated_positions):
+            structure = self._slots[slot]
+            # get position of option in structure
+            try:
+                option_index = structure.index(option)
+                if pos is not None and pos != option_index:
+                    # option exists in structure but has to be moved
+                    structure.insert(pos, structure.pop(option_index))
+            except ValueError:
+                # option doesn't exist in structure
+                structure.insert(-1 if pos is None else pos, option)
 
     @copy_doc(_set_option)
     def set_option(self, *args, **kwargs) -> ...:
         return self._set_option(*args, **kwargs)
-
-    @overload
-    def _add_entity(
-        self,
-        entity: ...,
-        position: int = ...,
-        slot: slots.SlotAccess = ...,
-    ) -> ...: ...
-
-    @overload
-    def _add_entity(
-        self,
-        entity: ...,
-        position: list[int] = ...,
-        slot: int | list[int] = ...,
-    ) -> ...: ...
-
-    @overload
-    def _add_entity(
-        self,
-        entity: UndefinedOption | Option,
-        position: ... = ...,
-        slot: ... = ...,
-    ) -> UndefinedOption: ...
-
-    @overload
-    def _add_entity(
-        self,
-        entity: Comment,
-        position: ... = ...,
-        slot: ... = ...,
-    ) -> Comment: ...
-
-    def _add_entity(
-        self,
-        entity: UndefinedOption | Option | Comment,
-        position: int | list[int] = -1,
-        slot: slots.SlotAccess = None,
-        add_missing_slots=True,
-    ) -> UndefinedOption | Comment:
-        """Add a new entity to the section.
-
-        Args:
-            entity (UndefinedOption | Option | Comment): The entity to add.
-            position (int | list[int | None], optional): Where to put the entity in
-                the section's structure. Either a list with one position per slot
-                or int for same position in all slots. Defaults to -1 (append to end in
-                every slot).
-            slot (int | list[int] | None, optional): Slot(s) to add the entity to.
-                Either int for one slot, list of int for multiple slots or None for all
-                slots. Must fit to position. Defaults to None.
-            add_missing_slots (bool, optional): Whether to add missing slots if slot
-                doesn't exist yet. Defaults to True.
-
-        Returns:
-            UndefinedOption | Comment: The newly created entity.
-        """
-        if isinstance(entity, Option):
-            if not isinstance(entity, UndefinedOption):
-                entity = UndefinedOption(entity)
-            varname = _str_to_var(entity.key)
-        elif isinstance(entity, Comment):
-            varname = self._get_next_comment_var()
-        else:
-            raise ValueError("Can only add (Undefined)Options or Comments.")
-
-        # add entity to section
-        super().__setattr__(varname, entity)
-
-        # add to structure
-        slot = self._get_slot_access(slot)
-        if isinstance(position, int):
-            position = [position]
-        if len(position) != len(slot):
-            raise ValueError("Number of positions must match number of slots.")
-        # for faster adding of missing slots we'll go from highest slot to lowest
-        for s, pos in sorted(zip(slot, position), reverse=True):
-            if not -self._nslot <= s < self._nslot:
-                if s >= 0 and add_missing_slots:
-                    self._add_slots(s - self._nslot + 1)
-                else:
-                    raise SlotNotFound(
-                        f"Can't insert into slot {s} because it doesn't exist."
-                    )
-            if not -len(self._slots[s]) - 1 <= pos <= len(self._slots[s]):
-                raise IndexError(
-                    f"Can't insert into slot {s} at position {pos} because slot is too small."
-                )
-            self._slots[s].insert(pos, entity)
-        return entity
-
-    @copy_doc(_add_entity)
-    def add_entity(self, *args, **kwargs) -> ...:
-        return self._add_entity(*args, **kwargs)
 
     def _get_options(self) -> dict[str, Option]:
         """Get all options of the section.
@@ -299,15 +365,29 @@ class Section(metaclass=SectionMeta):
     def get_options(self, *args, **kwargs) -> ...:
         return self._get_options(*args, **kwargs)
 
-    def _get_comments(self) -> tuple[tuple[str, Comment], ...]:
+    def _get_comment_by_content(self, content: str | re.Pattern) -> dict[str, Comment]:
+        content = (
+            content.pattern if isinstance(content, re.Pattern) else re.escape(content)
+        )
+        return {
+            name: var
+            for name, var in vars(self).items()
+            if isinstance(var, Comment) and re.search(var.content, content)
+        }
+
+    @copy_doc(_get_comment_by_content)
+    def get_comment_by_content(self, *args, **kwargs) -> ...:
+        return self._get_comment_by_content(*args, **kwargs)
+
+    def _get_comments(self) -> dict[str, Comment]:
         """Get all comments of the section.
 
         Returns:
-            tuple[tuple[str, Comment],...]: Tuples of variable Name and Comment.
+            dict[str, Comment]: Variable names as keys and Comments as values.
         """
-        return tuple(
-            (name, var) for name, var in vars(self).items() if isinstance(var, Comment)
-        )
+        return {
+            name: var for name, var in vars(self).items() if isinstance(var, Comment)
+        }
 
     @copy_doc(_get_comments)
     def get_comments(self, *args, **kwargs) -> ...:
@@ -321,31 +401,10 @@ class Section(metaclass=SectionMeta):
         """
         comment_ids = tuple(
             int(cid[0])
-            for name, _ in self._get_comments()
+            for name, _ in self._get_comments().items()
             if (cid := re.search(rf"(?<=^{COMMENT_VAR_PREFIX})\d+$", name))
         )
         return COMMENT_VAR_PREFIX + str(comment_ids[-1] + 1 if comment_ids else 0)
-
-    def _set_structure(
-        self, new_structure: Sequence[Option | Comment] | Sequence, slot: slots.SlotAccess
-    ) -> None:
-        slot = self._get_slot_access(slot)
-        if any(entity not in vars(self).values() for entity in new_structure):
-            raise IniStructureError(
-                "Entities of new structure must all belong to section."
-            )
-        for s in slot:
-            self._slots[s] = Section.Structure(new_structure)
-
-    def _get_slot_access(self, slot: slots.SlotAccess) -> list[int]:
-        if slot is None:
-            return list(range(len(self._slots)))
-        elif isinstance(slot, int):
-            return [slot]
-        for s in slot:
-            if s >= self._nslot:
-                raise SlotNotFound(f"Can't access slot {s} because it doesn't exist.")
-        return slot
 
 
 class UndefinedSection(Section):
@@ -364,7 +423,7 @@ class _SchemaMeta(type):
 
     def __new__(cls, __name: str, __bases: tuple, __dict: dict):
         #  make sure it's the initialization call
-        if __bases and Schema in __bases:
+        if __bases and StructureSlotEntity not in __bases and Schema in __bases:
             if wrong_var := next(
                 (
                     var
@@ -379,14 +438,13 @@ class _SchemaMeta(type):
                     f"{wrong_var}')"
                 )
         return super().__new__(cls, __name, __bases, __dict)
-
-
-class Schema(metaclass=_SchemaMeta):
+    
+class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
 
     def __init__(
         self,
         parameters: Parameters | None = None,
-        slot_decider: slots.DeciderMethods = "default",
+        method: SlotDeciderMethods = "default",
         **kwargs,
     ) -> None:
         """Schema class. Parameters will be stored as default read and write parameters.
@@ -397,64 +455,39 @@ class Schema(metaclass=_SchemaMeta):
                 as kwargs. Missing parameters (because parameters is None and no or not
                 enough kwargs are passed) will be taken from default Parameters
                 (see doc of Parameters). Defaults to None.
-            slot_decider ("default" | "latest", optional): Method to choose the slot.
-                "default" will use slot 0 whenenver latest slot is None, "latest" will
-                use latest slot only. Defaults to "default".
-            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
+            method ("default" | "first" | "latest", optional): Method for choosing
+                the slot. "default" will use slot 0 whenenver latest slot is None,
+                "first" will use first slot, "latest" the last slot that was added.
+                Defaults to "default".
+            **kwargs (optional): Parameters as kwargs. See Parameters doc for details.
         """
-
+        super().__init__()
         ### read arguments ###
         if parameters is None:
             parameters = Parameters()
         if kwargs:
-            parameters = dataclass_replace(parameters, **kwargs)
+            parameters.update(**kwargs)
         self._default_parameters = parameters
-        self._decider_method = slot_decider
-        # contains one SlotView per section
-        # proxies are added on access (see __getattribute__)
-        self._slot_views = {}
-
-    @property
-    def _nslot(self) -> int:
-        sections = self._get_sections(filled_only=True).values()
-        return max(sec._nslot for sec in sections) if sections else 0
-
-    @property
-    def nslot(self) -> int:
-        return self._nslot
+        self._decider_method = method
+        self.iloc = SlotIlocViewer
 
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
         if isinstance(attr, Section):
-            if name not in self._slot_views:
-                self._slot_views[name] = SlotView(
-                    target=attr, slot=self._decider_method
-                )
-            return self._slot_views[name]
+            return SlotDecider(target=attr, slots = self._slots,decider_method=self._decider_method)
         return attr
 
-    @overload
-    def __getitem__(self, key: str) -> Section: ...
+    def __getitem__(self, key: SlotAccess) -> Self:
+        return SlotViewer(target=self, slot=key)
+    
+    def __setitem__(self,*_,**__) -> None:
+        raise TypeError("Schema doesn't support item assignment.")
 
-    @overload
-    def __getitem__(self, key: int) -> Self: ...
-
-    def __getitem__(self, key: str | int) -> Section | Self:
-        if isinstance(key, int):
-            if key >= self._nslot:
-                raise IndexError("Slot index out of range")
-            return SlotView(target=self, slot=key)
-
-        for _, sec in self._get_sections().items():
-            if getattr(sec, SECTION_NAME_VARIABLE) == key:
-                return sec
-        raise EntityNotFound(f"'{key} is not a known section name.")
-
-    def _with_slot(self, slot: int) -> Self:
+    def _with_slot(self, slot: SlotAccess) -> Self:
         """Access the ini using a specific slot.
 
         Args:
-            slot (int): The slot to use.
+            slot (SlotAccess): The slot to use.
         """
         return self[slot]
 
@@ -520,8 +553,9 @@ class Schema(metaclass=_SchemaMeta):
         self,
         path: str | Path,
         parameters: Parameters | None = None,
-        slot: int | None = None,
         parameters_as_default: bool = False,
+        *,
+        slots: SlotAccess | Literal[False] = False,
         **kwargs,
     ) -> None:
         """Read an ini file. If no parameters are passed (as Parameters object or kwargs),
@@ -534,34 +568,44 @@ class Schema(metaclass=_SchemaMeta):
                 as kwargs. Missing parameters (because parameters is None and no or not
                 enough kwargs are passed) will be taken from default Parameters that
                 were defined on initialization. Defaults to None.
-            slot (int | None, optional): Slot to save option values in. If None will
-                create new slot. Defaults to None.
             parameters_as_default (bool, optional): Whether to save the parameters for
                 this read as default parameters. Defaults to False.
             **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
+            slots (SlotAccess | False, optional): Slot(s) to save the content in.
+                If False will create new slot. Defaults to False.
         """
         # define parameters
         if parameters is None:
             # take parameters from copy of self._parameters
             parameters = self._default_parameters
+        assert isinstance(parameters,Parameters)
         if kwargs:
-            parameters = dataclass_replace(parameters, **kwargs)
+            parameters.update(**kwargs)
         if parameters_as_default:
             self._default_parameters = parameters
+        if slots is False:
+            # Generate new slot key
+            slot_keys = self._slots.keys()
+            len_slots = len(slot_keys)
+            slots = next(
+                slot_key
+                for slot_key in range(
+                    len_slots,
+                    len_slots * 2 + 1,
+                )
+                if slot_key not in slot_keys
+            )
+            self._slots.add(slots)
+        else:
+            slots = self._slots.slot_access(slots,verify=True)
 
         with open(path, "r") as file:
             file_content = file.read()
 
-        if slot is not None and slot >= self._nslot:
-            raise SlotNotFound(
-                f"Can't read ini into slot {slot} because it doesn't exist."
-            )
-        slot = self._nslot if slot is None else slot
-
         current_option: Option | None = None
         # get unnamed section, delete later if undefined and unused
         current_section = self._get_unnamed_section(parameters=parameters)
-        structure: list[Option | Comment] = []
+        current_section_structure: list[Option | Comment] = []
 
         # split into entities
         entities = re.split(
@@ -590,14 +634,16 @@ class Schema(metaclass=_SchemaMeta):
                 or "section" not in parameters.continuation_ignore
             ):
                 if extracted_section_name := self._extract_section_name(entity_content):
-                    if current_section:
+                    if current_section and current_section_structure:
                         # reorder old section structure and reset for new section
                         current_section._set_structure(
-                            structure, -1 if slot is None else slot
+                            new_structure=current_section_structure,
+                            slots=slots,
+                            create_missing_slots=True,
                         )
-                        structure = []
+                        current_section_structure = []
                     current_section = self._handle_section_name(
-                        extracted_section_name, parameters
+                        extracted_section_name, parameters, slots=slots
                     )
                     continue
 
@@ -610,12 +656,14 @@ class Schema(metaclass=_SchemaMeta):
                 not possible_continuation
                 or "option" not in parameters.continuation_ignore
             ):
-                if option := self._extract_option(entity_content, parameters):
+                if option := self._extract_option(
+                    entity_content, parameters, slots=slots
+                ):
                     if handled_option := self._handle_option(
-                        option, parameters, current_section, slot
+                        option, parameters, current_section, slots=slots
                     ):
                         current_option = handled_option
-                        structure.append(current_option)
+                        current_section_structure.append(current_option)
                         continue
 
             # try to extract comment
@@ -624,8 +672,10 @@ class Schema(metaclass=_SchemaMeta):
                 or "comment" not in parameters.continuation_ignore
             ):
                 if comment := self._extract_comment(entity_content, parameters):
-                    comment = self._handle_comment(comment, current_section, slot)
-                    structure.append(comment)
+                    comment = self._handle_comment(
+                        comment, current_section, slots=slots
+                    )
+                    current_section_structure.append(comment)
                     continue
 
             # possible continuation
@@ -642,7 +692,7 @@ class Schema(metaclass=_SchemaMeta):
                 raise ContinuationError(
                     f"line {entity_index} doesn't follow continuation rules."
                 )
-            self._handle_continuation(entity_content, current_option, slot)
+            self._handle_continuation(entity_content, current_option, slots=slots)
 
         if (
             isinstance(
@@ -655,10 +705,6 @@ class Schema(metaclass=_SchemaMeta):
     @copy_doc(_read_ini)
     def read_ini(self, *args, **kwargs) -> ...:
         return self._read_ini(*args, **kwargs)
-
-    def _ensure_slot_access(self, section: Section, slot: int) -> None:
-        if section._nslot <= slot:
-            section._add_slots(slot - section._nslot + 1)
 
     def _get_unnamed_section(self, parameters: Parameters) -> Section | None:
         """Get the unnamed section (always at the beginning of the ini).
@@ -705,12 +751,15 @@ class Schema(metaclass=_SchemaMeta):
         self,
         extracted_section_name: SectionName,
         parameters: Parameters,
+        *,
+        slots: SlotAccess
     ) -> Section | None:
         """Handle an extracted SectionName (add new section if necessary).
 
         Args:
             section_name (SectionName): The extracted section name.
             parameters (Parameters): Ini read and write parameters.
+            slots (SlotAccess): Slots that the section should have.
 
         Returns:
             Section | None: The section belonging to the extracted SectionName or None
@@ -728,29 +777,40 @@ class Schema(metaclass=_SchemaMeta):
                 section = section()
                 setattr(self, section_var, section)
         except EntityNotFound:
-            if parameters.read_undefined in (True, "section"):
-                # undefined section
-                valid_varname = _str_to_var(extracted_section_name)
-                section = UndefinedSection(extracted_section_name)
-                setattr(self, valid_varname, section)
-            else:
+            if parameters.read_undefined not in (True, "section"):
                 # section is not defined and undefined sections are not allowed, thus
-                section = None
+                return None
+
+            # undefined section
+            section_var = _str_to_var(extracted_section_name)
+            section = UndefinedSection(extracted_section_name)
+            setattr(self, section_var, section)
+
+        # make sure section is in slots
+        self._insert_structure_items(section,-1,exist_ok=True,slots=slots)
+        # add slot to section
+        section._add_slots(keys=slots,exist_ok=True)
+
 
         return section
 
-    def _extract_option(self, entity: str, parameters: Parameters) -> Option | None:
+    def _extract_option(
+        self, entity: str, parameters: Parameters, *, slots: SlotAccess
+    ) -> Option | None:
         """Extract an option if present in entity.
 
         Args:
             entity (str): The entity to extract the section from.
             parameters (Parameters): Ini read and write parameters.
+            slots (SlotAccess): Slot(s) the new option should have.
 
         Returns:
             Option | None: The extracted option or None if no option was found in entity.
         """
         try:
-            return Option(delimiter=parameters.option_delimiters, from_string=entity)
+            return Option.from_string(
+                string=entity, delimiter=parameters.option_delimiters, slots=slots
+            )
         except ExtractionError:
             return None
 
@@ -759,7 +819,8 @@ class Schema(metaclass=_SchemaMeta):
         extracted_option: Option,
         parameters: Parameters,
         section: Section,
-        slot: int,
+        *,
+        slots: SlotAccess,
     ) -> Option | None:
         """Handle an extracted Option.
 
@@ -767,7 +828,7 @@ class Schema(metaclass=_SchemaMeta):
             extracted_option (Option): Extracted option to handle.
             parameters (Parameters): Ini read and write parameters.
             section (Section): The section to add the option to.
-            slot (int): Slot to save option values in and add to the section.
+            slot (SlotAccess): Slot(s) to save option values in and add to the section.
 
         Returns:
             Option | None: The final Option in the section (differs from input) or None
@@ -777,14 +838,17 @@ class Schema(metaclass=_SchemaMeta):
         # check if Option is defined
         try:
             option = section._get_option(key=extracted_option.key)
-            option.set_value(extracted_option.slots[0], slot, add_missing_slots=True)
-        except NameError:
-            if parameters.read_undefined in (True, "option"):
-                new_slot = extracted_option.slots[0]
-                extracted_option.set_value(None, 0)
-                extracted_option.set_value(new_slot, slot, True)
+            # add slot if needed
+            
+            option._set_slots(
+                new_slot_value=extracted_option.iloc[-1][1],
+                slots=slots,
+                create_missing_slots=True,
+            )
+        except EntityNotFound:
+            if parameters.read_undefined in {True, "option"}:
                 # create UndefinedOption
-                option = section._add_entity(extracted_option, slot)
+                option = section._add_entity(extracted_option, slots=slots)
             else:
                 return None
 
@@ -809,21 +873,21 @@ class Schema(metaclass=_SchemaMeta):
             return None
 
     def _handle_comment(
-        self, extracted_comment: Comment, section: Section, slot: int
+        self, extracted_comment: Comment, section: Section, *, slots: SlotAccess
     ) -> Comment:
         """Handle an extracted Comment (add it to section if necessary).
 
         Args:
             extracted_comment (Comment): Extracted comment to handle.
             section (Section): The section to add the comment to.
-            slot (int): Slot to add the comment to in the section.
+            slot (SlotAccess): Slot to add the comment to in the section.
 
         Returns:
             Comment: The comment added to the section
                 (as of now the input Comment object).
 
         """
-        section._add_entity(extracted_comment, position=-1, slot=slot)
+        section._add_entity(extracted_comment, positions=-1, slots=slots)
         return extracted_comment
 
     def _check_for_possible_continuation(
@@ -862,18 +926,23 @@ class Schema(metaclass=_SchemaMeta):
         continuation = re.search(rf"(?<=^{parameters.continuation_prefix}).*", entity)
         return None if continuation is None else continuation[0]
 
-    def _handle_continuation(self, continuation: str, last_option: Option, slot: int) -> None:
+    def _handle_continuation(
+        self, continuation: str, last_option: Option, *, slots: SlotAccess
+    ) -> None:
         """Handles a continutation (adds it to the last option).
 
         Args:
             continuation (str): The continuation.
             last_option (Option): The last option to add the continuation to.
-            slot (int): Slot to add the continuation to.
+            slot (SlotAccess): Slot to add the continuation to.
         """
         # add continuation to last option
-        if not isinstance(last_option[slot].value, list):
-            last_option[slot].value = [last_option[slot].value]
-        last_option[slot].value.append(continuation)
+        last_option._apply_to_slots(
+            lambda val: (
+                [*val, continuation] if isinstance(val, list) else [val, continuation]
+            ),
+            slots=slots,
+        )
 
     def _is_empty_entity(self, entity: str, parameters: Parameters) -> bool:
         """Check whether an entity qualifies as empty.
@@ -890,62 +959,189 @@ class Schema(metaclass=_SchemaMeta):
                 r"[\s\t]*" if parameters.ignore_whitespace_lines else r"", entity
             )
         )
-        
+
+
 class SlotView:
-    # Note: SlotView should only contain underscore functions, otherwise __getattribute__
-    # might fail
+
+    def __init__(self, target: Schema | Section) -> None:
+        super().__setattr__("_target", target)
+        super().__setattr__("_slot_views", {})
+
+    def _slot_access(self, access_target: Callable, slot: SlotAccess) -> Callable:
+        """Access a callable and set the slot accordingly.
+
+        Args:
+            access_target (Callable): The callable to access.
+            slot (SlotAccess): The slot(s) to access.
+
+        Returns:
+            Callable: A function that mimics the requested Callable but sets the
+                SlotAccess argument to self._slot.
+        """
+        access_kwarg = next(
+            k
+            for k, v in inspect.get_annotations(access_target).items()
+            if v == SlotAccess
+        )
+        assert isinstance(access_kwarg, str)
+
+        def accesser_func(*args, **kwargs):
+            kwargs[access_kwarg] = slot
+            return access_target(*args, **kwargs)
+
+        return accesser_func
+
+    def _set_slot(self, name: str, value: Any, slot: SlotAccess) -> None:
+        target, attr = super().__getattribute__("_get_target_attr")(name)
+        if not (isinstance(attr, Option) and isinstance(target, Section)):
+            raise AttributeError("Assignment only valid for options.")
+        super().__getattribute__("_slot_access")(
+            access_target=target._set_option, slot=slot
+        )(name=name, value=value)
+        
+    def _get_target_attr(self,name:str) -> tuple[Schema | Section,Any]:
+        target = super().__getattribute__("_target")
+        attr = target.__dict__.get(name,None) or getattr(target,name)
+        return (target,attr)
+
+
+class SlotDecider(SlotView):
+
+    def __init__(self, target: Section, slots: Slots, decider_method: SlotDeciderMethods) -> None:
+        """Gives access to slots by deciding..
+
+        Args:
+            target (Section): The target to prepare for slot access.
+            slots (Slots): The slots to take as reference.
+            decider_method (SlotDeciderMethods): The method to use for decision.
+        """
+        super().__init__(target=target)
+        super().__setattr__("_decider_method", decider_method)
+        super().__setattr__("_slots",slots)
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in {
+            "__getattribute__",
+            "__setattr__",
+            "__init__",
+            "__new__",
+            "__call__",
+        }:
+            return super().__getattribute__(name)
+        target, attr = super().__getattribute__("_get_target_attr")(name)
+        
+        if isinstance(attr, Option):
+            return super().__getattribute__("_decide_slot")(attr)[1]
+        elif not name.startswith("__") and callable(attr) and SlotAccess in inspect.get_annotations(attr).values():
+            slot_key = super().__getattribute__("_decide_slot")(target)[0]
+            return super().__getattribute__("_slot_access")(attr, slot_key)
+        
+        return attr
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        _, attr = super().__getattribute__("_get_target_attr")(name)
+        slot = super().__getattribute__("_decide_slot")(attr)[0]
+        super().__getattribute__("_set_slot")(name, value, slot)
+
+    def _decide_slot(self, target: Option | Section) -> tuple[
+        SlotKey,
+        OptionSlot | Structure,
+    ]:
+        """Decides, which slot to access using the defined decider method.
+
+        Args:
+            target (Option | Section): The Option or Section that is to be accessed.
+
+        Returns:
+            tuple[SlotKey, OptionSlot | SectionStructure]: Tuple of the target's
+                decided slot's key and value.
+
+        """
+        decider_method: SlotDeciderMethods = super().__getattribute__("_decider_method")
+        slots : Slots = super().__getattribute__("_slots")
+        
+        latest_key = slots.iloc[-1][0]
+        first_key = slots.iloc[0][0]
+
+        match decider_method:
+            case "default":
+                latest_val = target._get_slots(latest_key)
+                return (latest_key,latest_val) if latest_val is not None else (first_key,target._get_slots(first_key))
+            case "first":
+                return first_key,target._get_slots(first_key)
+            case "latest":
+                return latest_key, target._get_slots(latest_key)
+
+
+class SlotViewer(SlotView):
 
     def __init__(
         self,
         target: Schema | Section,
-        slot: slots.DeciderMethods | int,
+        slot: SlotAccess,
     ) -> None:
         """Gives access to a specific slot.
 
         Args:
             target (Schema | Section): The target to prepare for slot access.
-            slot ("default" | "latest" | int): A decider method or the slot to access.
+            slot (SlotAccess): The slot to access.
         """
-        super().__setattr__("_target", target)
+        super().__init__(target=target)
         super().__setattr__("_slot", slot)
 
     def __getattribute__(self, name: str) -> Any:
-        try:
-            # if SlotView has the attribute return it
+
+        if name in {
+            "__getattribute__",
+            "__setattr__",
+            "__init__",
+            "__new__",
+            "__call__",
+            "__class__"
+        }:
             return super().__getattribute__(name)
-        except AttributeError:
-            target = super().__getattribute__("_target")
-            slot = super().__getattribute__("_slot")
-            attr = getattr(target, name)
-            if isinstance(target, Schema) and isinstance(attr, Section):
-                return SlotView(target=attr, slot=slot)
-            elif isinstance(target, Section) and isinstance(attr, Option):
-                return self._decide(attr)
-            return attr
+
+        target, attr = super().__getattribute__("_get_target_attr")(name)
+        slot: SlotAccess = super().__getattribute__("_slot")
+
+        # Schema[].Section
+        if isinstance(attr, Section):
+            assert isinstance(target, Schema)
+            return SlotViewer(target=attr, slot=slot)
+
+        # Schema[].Section.Option
+        elif isinstance(attr, Option):
+            assert isinstance(target, Section)
+            return attr[slot]
+
+        # Schema[].Section.(SlotAccess)
+        elif callable(attr):
+            return super().__getattribute__("_slot_access")(attr, slot)
+
+        return attr
 
     def __setattr__(self, name: str, value: Any) -> None:
-        target = super().__getattribute__("_target")
-        slot = super().__getattribute__("_slot")
-        if not isinstance(target, Section):
-            raise AttributeError("Assignment only valid for options.")
-        target._set_option(name=name, value=value, slot=slot)
+        slot: SlotAccess = super().__getattribute__("_slot")
+        super().__getattribute__("_set_slot")(name, value, slot)
 
-    def _decide(self, target: Option) -> Any:
-        slot = super().__getattribute__("_slot")
-        match slot:
-            case "default":
-                slot= (
-                    target.slots[-1]
-                    if target.slots[-1] is not None
-                    else target.slots[0]
-                )
-            case "lastest":
-                slot = target.slots[-1]
-            case _:
-                if isinstance(slot,int):
-                    slot = target.slots[slot]
-                else:
-                    raise ValueError("Slot or decider method invalid.")
-        return slot.value
+    def _export(self, path: str | Path) -> None:
+        path = Path(path)
+        # TODO
+        
+class SlotIlocViewer(SlotView):
     
+    def __init__(
+        self,
+        target: Schema,
+    ) -> None:
+        """Gives access to a specific slot by index.
 
+        Args:
+            target (Schema): The target to prepare for slot access.
+        """
+        super().__init__(target)
+
+    def __getitem__(self,index:int) -> SlotViewer:
+        if not isinstance(index,int):
+            raise ValueError("Indexing only works with int.")
+        target: Schema = super().__getattribute__("_target")        
