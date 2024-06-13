@@ -394,7 +394,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             parameters.update(**kwargs)
         self._default_parameters = parameters
         self._decider_method = method
-        self.iloc = SlotIlocViewer
+        self.iloc = SlotIlocViewer(self)
 
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
@@ -928,7 +928,7 @@ class SlotDecider(SlotView):
     def __init__(
         self, target: Section, slots: Slots, decider_method: SlotDeciderMethods
     ) -> None:
-        """Gives access to slots by deciding..
+        """Gives access to slots by deciding.
 
         Args:
             target (Section): The target to prepare for slot access.
@@ -1055,9 +1055,10 @@ class SlotViewer(SlotView):
     def _export(self, path: str | Path) -> None:
         path = Path(path)
         # TODO
-        
+
+
 class SlotIlocViewer(SlotView):
-    
+
     def __init__(
         self,
         target: Schema,
@@ -1069,7 +1070,12 @@ class SlotIlocViewer(SlotView):
         """
         super().__init__(target)
 
-    def __getitem__(self,index:int) -> SlotViewer:
-        if not isinstance(index,int):
+    def __getitem__(self, index: int) -> SlotViewer:
+        if not isinstance(index, int):
             raise ValueError("Indexing only works with int.")
-        target: Schema = super().__getattribute__("_target")        
+        target: Schema = super().__getattribute__("_target")
+        try:
+            requested_slot = target._slots.iloc[index][0]
+        except IndexError as e:
+            raise IndexError("Slots index out of range.") from e
+        return SlotViewer(target=target, slot=requested_slot)
