@@ -1,10 +1,13 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
-from typing import Any, Literal, overload, Sequence, Self, Callable
+from typing import Any, Literal, Self, Callable
 import itertools
 import re
 from pathlib import Path
+import warnings
+import inspect
+import contextlib
 from src.exceptions import (
     ContinuationError,
     IniStructureError,
@@ -19,7 +22,14 @@ from src.entities import (
     SectionName,
     UndefinedOption,
 )
-from src.slots import SlotAccess, SlotKey, SlotDeciderMethods, Slots, SlotEntity, StructureSlotEntity, Structure
+from src.slots import (
+    SlotAccess,
+    SlotKey,
+    SlotDeciderMethods,
+    Slots,
+    StructureSlotEntity,
+    Structure,
+)
 from src.args import Parameters
 from src.globals import (
     COMMENT_VAR_PREFIX,
@@ -29,11 +39,8 @@ from src.globals import (
     INTERNAL_PREFIX_IN_WORDS,
 )
 from src.utils import _str_to_var
-from . import warn
+from src import warn
 from nomopytools.func import copy_doc
-import warnings
-import inspect
-import contextlib
 
 
 class SectionMeta(type):
@@ -59,7 +66,8 @@ class SectionMeta(type):
             )
         return super().__new__(cls, __name, __bases, __dict)
 
-class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
+
+class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
     # name of the section. must be provided!
     _name: str | None
@@ -69,7 +77,7 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
         'name' class attribute.
         """
         super().__init__()
-        
+
         # schema_structure contains the initial structure as saved in the schema
         self._schema_structure = Structure()
 
@@ -90,24 +98,6 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
                 option = Option(key=val)
                 super().__setattr__(var, option)
                 self._schema_structure.append(option)
-        
-    @overload
-    def _add_entity(
-        self,
-        entity: UndefinedOption | Option,
-        positions: int | list[int] = -1,
-        *,
-        slots: SlotAccess = None,
-    ) -> UndefinedOption: ...
-
-    @overload
-    def _add_entity(
-        self,
-        entity: Comment,
-        positions: int | list[int] = -1,
-        *,
-        slots: SlotAccess = None,
-    ) -> Comment: ...
 
     def _add_entity(
         self,
@@ -150,61 +140,13 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
         super().__setattr__(varname, entity)
 
         # add to structure
-        self._insert_structure_items(entity,positions,slots=slots)
-        
+        self._insert_structure_items(entity, positions, slots=slots)
+
         return entity
 
-    @overload
-    @classmethod
-    def add_entity(
-        cls,
-        entity: UndefinedOption | Option,
-        positions: int | list[int] = -1,
-        *,
-        slots: SlotAccess = None,
-    ) -> UndefinedOption: ...
-
-    @overload
-    @classmethod
-    def add_entity(
-        cls,
-        entity: Comment,
-        positions: int | list[int] = -1,
-        *,
-        slots: SlotAccess = None,
-    ) -> Comment: ...
-
-    @classmethod
-    def add_entity(
-        cls,
-        entity: UndefinedOption | Option | Comment,
-        positions: int | list[int] = -1,
-        *,
-        slots: SlotAccess = None,
-    ) -> UndefinedOption | Comment:
-        """Add a new entity to the section.
-
-        Args:
-            entity (UndefinedOption | Option | Comment): The entity to add.
-            positions (int | list[int | None], optional): Where to put the entity in
-                the section's structure. Either one position for all slots or a list
-                with one position per slot. Defaults to -1 (append to end in every slot).
-            slots (SlotAccess, optional): Slot(s) to add the entity to.
-                Must match positions. Defaults to None.
-
-        Returns:
-            UndefinedOption | Comment: The newly created entity.
-        """
-        ...
-    
-    def add_entity(
-        self,
-        entity: UndefinedOption | Option | Comment,
-        positions: int | list[int] = -1,
-        *,
-        slots: SlotAccess = None,
-    ) -> UndefinedOption | Comment:
-        return self._add_entity(entity,positions,slots=slots)
+    @copy_doc(_add_entity, annotations=True)
+    def add_entity(self, *args, **kwargs) -> ...:
+        return self._add_entity(*args, **kwargs)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if isinstance(value, (Option, Comment)):
@@ -212,12 +154,6 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
                 "Options and Comments must be added using the respective methods."
             )
         super().__setattr__(name, value)
-
-    @overload
-    def _get_option(self, name: str = ..., key: SlotKey | None = ...) -> Option: ...
-
-    @overload
-    def _get_option(self, name: None = ..., key: SlotKey = ...) -> Option: ...
 
     def _get_option(
         self, name: str | None = None, key: SlotKey | None = None
@@ -255,30 +191,9 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
             return option
         raise ValueError("name or key must be provided.")
 
-    @copy_doc(_get_option)
+    @copy_doc(_get_option, annotations=True)
     def get_option(self, *args, **kwargs) -> ...:
         return self._get_option(*args, **kwargs)
-
-    @overload
-    def _set_option(
-        self,
-        name: str,
-        positions: int | list[int | None] | None = None,
-        key: ... = ...,
-        *,
-        slots: SlotAccess = None,
-        **kwargs,
-    ) -> None: ...
-    @overload
-    def _set_option(
-        self,
-        name: None,
-        positions: int | list[int | None] | None = None,
-        key: str = ...,
-        *,
-        slots: SlotAccess = None,
-        **kwargs,
-    ) -> None: ...
 
     def _set_option(
         self,
@@ -347,7 +262,7 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
                 # option doesn't exist in structure
                 structure.insert(-1 if pos is None else pos, option)
 
-    @copy_doc(_set_option)
+    @copy_doc(_set_option, annotations=True)
     def set_option(self, *args, **kwargs) -> ...:
         return self._set_option(*args, **kwargs)
 
@@ -361,11 +276,20 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
             name: var for name, var in vars(self).items() if isinstance(var, Option)
         }
 
-    @copy_doc(_get_options)
+    @copy_doc(_get_options, annotations=True)
     def get_options(self, *args, **kwargs) -> ...:
         return self._get_options(*args, **kwargs)
 
     def _get_comment_by_content(self, content: str | re.Pattern) -> dict[str, Comment]:
+        """Get a comment by its content.
+
+        Args:
+            content (str | re.Pattern): The content of the comment.
+
+        Returns:
+            dict[str, Comment]: All comments that fit the content argument with variable
+                names as keys and the Comment objects as values.
+        """
         content = (
             content.pattern if isinstance(content, re.Pattern) else re.escape(content)
         )
@@ -375,7 +299,7 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
             if isinstance(var, Comment) and re.search(var.content, content)
         }
 
-    @copy_doc(_get_comment_by_content)
+    @copy_doc(_get_comment_by_content, annotations=True)
     def get_comment_by_content(self, *args, **kwargs) -> ...:
         return self._get_comment_by_content(*args, **kwargs)
 
@@ -389,7 +313,7 @@ class Section(StructureSlotEntity[Option|Comment], metaclass=SectionMeta):
             name: var for name, var in vars(self).items() if isinstance(var, Comment)
         }
 
-    @copy_doc(_get_comments)
+    @copy_doc(_get_comments, annotations=True)
     def get_comments(self, *args, **kwargs) -> ...:
         return self._get_comments(*args, **kwargs)
 
@@ -438,8 +362,9 @@ class _SchemaMeta(type):
                     f"{wrong_var}')"
                 )
         return super().__new__(cls, __name, __bases, __dict)
-    
-class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
+
+
+class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
     def __init__(
         self,
@@ -474,13 +399,15 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
         if isinstance(attr, Section):
-            return SlotDecider(target=attr, slots = self._slots,decider_method=self._decider_method)
+            return SlotDecider(
+                target=attr, slots=self._slots, decider_method=self._decider_method
+            )
         return attr
 
     def __getitem__(self, key: SlotAccess) -> Self:
         return SlotViewer(target=self, slot=key)
-    
-    def __setitem__(self,*_,**__) -> None:
+
+    def __setitem__(self, *_, **__) -> None:
         raise TypeError("Schema doesn't support item assignment.")
 
     def _with_slot(self, slot: SlotAccess) -> Self:
@@ -491,7 +418,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
         """
         return self[slot]
 
-    @copy_doc(_with_slot)
+    @copy_doc(_with_slot, annotations=True)
     def with_slot(self, *args, **kwargs) -> ...:
         return self._with_slot(*args, **kwargs)
 
@@ -516,14 +443,6 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
                 f"Can't get section '{section_name}' because it doesn't exist."
             ) from e
 
-    @overload
-    def _get_sections(self, filled_only: Literal[True] = ...) -> dict[str, Section]: ...
-
-    @overload
-    def _get_sections(
-        self, filled_only: Literal[False] = ...
-    ) -> dict[str, Section | SectionMeta]: ...
-
     def _get_sections(
         self, filled_only: bool = True
     ) -> dict[str, Section] | dict[str, Section | SectionMeta]:
@@ -545,7 +464,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
             instances = (Section, SectionMeta)
         return {var: val for var, val in iterator if isinstance(val, instances)}
 
-    @copy_doc(_get_sections)
+    @copy_doc(_get_sections, annotations=True)
     def get_sections(self, *args, **kwargs) -> ...:
         return self._get_sections(*args, **kwargs)
 
@@ -578,7 +497,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
         if parameters is None:
             # take parameters from copy of self._parameters
             parameters = self._default_parameters
-        assert isinstance(parameters,Parameters)
+        assert isinstance(parameters, Parameters)
         if kwargs:
             parameters.update(**kwargs)
         if parameters_as_default:
@@ -597,7 +516,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
             )
             self._slots.add(slots)
         else:
-            slots = self._slots.slot_access(slots,verify=True)
+            slots = self._slots.slot_access(slots, verify=True)
 
         with open(path, "r") as file:
             file_content = file.read()
@@ -702,7 +621,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
         ):
             del unnamed
 
-    @copy_doc(_read_ini)
+    @copy_doc(_read_ini, annotations=True)
     def read_ini(self, *args, **kwargs) -> ...:
         return self._read_ini(*args, **kwargs)
 
@@ -752,7 +671,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
         extracted_section_name: SectionName,
         parameters: Parameters,
         *,
-        slots: SlotAccess
+        slots: SlotAccess,
     ) -> Section | None:
         """Handle an extracted SectionName (add new section if necessary).
 
@@ -787,10 +706,9 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
             setattr(self, section_var, section)
 
         # make sure section is in slots
-        self._insert_structure_items(section,-1,exist_ok=True,slots=slots)
+        self._insert_structure_items(section, -1, exist_ok=True, slots=slots)
         # add slot to section
-        section._add_slots(keys=slots,exist_ok=True)
-
+        section._add_slots(keys=slots, exist_ok=True)
 
         return section
 
@@ -839,7 +757,7 @@ class Schema(StructureSlotEntity[Section],metaclass=_SchemaMeta):
         try:
             option = section._get_option(key=extracted_option.key)
             # add slot if needed
-            
+
             option._set_slots(
                 new_slot_value=extracted_option.iloc[-1][1],
                 slots=slots,
@@ -998,16 +916,18 @@ class SlotView:
         super().__getattribute__("_slot_access")(
             access_target=target._set_option, slot=slot
         )(name=name, value=value)
-        
-    def _get_target_attr(self,name:str) -> tuple[Schema | Section,Any]:
+
+    def _get_target_attr(self, name: str) -> tuple[Schema | Section, Any]:
         target = super().__getattribute__("_target")
-        attr = target.__dict__.get(name,None) or getattr(target,name)
-        return (target,attr)
+        attr = target.__dict__.get(name, None) or getattr(target, name)
+        return (target, attr)
 
 
 class SlotDecider(SlotView):
 
-    def __init__(self, target: Section, slots: Slots, decider_method: SlotDeciderMethods) -> None:
+    def __init__(
+        self, target: Section, slots: Slots, decider_method: SlotDeciderMethods
+    ) -> None:
         """Gives access to slots by deciding..
 
         Args:
@@ -1017,7 +937,7 @@ class SlotDecider(SlotView):
         """
         super().__init__(target=target)
         super().__setattr__("_decider_method", decider_method)
-        super().__setattr__("_slots",slots)
+        super().__setattr__("_slots", slots)
 
     def __getattribute__(self, name: str) -> Any:
         if name in {
@@ -1029,13 +949,17 @@ class SlotDecider(SlotView):
         }:
             return super().__getattribute__(name)
         target, attr = super().__getattribute__("_get_target_attr")(name)
-        
+
         if isinstance(attr, Option):
             return super().__getattribute__("_decide_slot")(attr)[1]
-        elif not name.startswith("__") and callable(attr) and SlotAccess in inspect.get_annotations(attr).values():
+        elif (
+            not name.startswith("__")
+            and callable(attr)
+            and SlotAccess in inspect.get_annotations(attr).values()
+        ):
             slot_key = super().__getattribute__("_decide_slot")(target)[0]
             return super().__getattribute__("_slot_access")(attr, slot_key)
-        
+
         return attr
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1058,17 +982,21 @@ class SlotDecider(SlotView):
 
         """
         decider_method: SlotDeciderMethods = super().__getattribute__("_decider_method")
-        slots : Slots = super().__getattribute__("_slots")
-        
+        slots: Slots = super().__getattribute__("_slots")
+
         latest_key = slots.iloc[-1][0]
         first_key = slots.iloc[0][0]
 
         match decider_method:
             case "default":
                 latest_val = target._get_slots(latest_key)
-                return (latest_key,latest_val) if latest_val is not None else (first_key,target._get_slots(first_key))
+                return (
+                    (latest_key, latest_val)
+                    if latest_val is not None
+                    else (first_key, target._get_slots(first_key))
+                )
             case "first":
-                return first_key,target._get_slots(first_key)
+                return first_key, target._get_slots(first_key)
             case "latest":
                 return latest_key, target._get_slots(latest_key)
 
@@ -1097,7 +1025,7 @@ class SlotViewer(SlotView):
             "__init__",
             "__new__",
             "__call__",
-            "__class__"
+            "__class__",
         }:
             return super().__getattribute__(name)
 
