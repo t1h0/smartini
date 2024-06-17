@@ -18,6 +18,7 @@ from src.exceptions import (
 )
 from src.entities import (
     Comment,
+    CommentGroup,
     Option,
     OptionSlot,
     SectionName,
@@ -378,16 +379,17 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
     def _assign_comments_to_options(
         self, *, slots: SlotAccess = None
-    ) -> OrderedDict[Option, OrderedDict[SlotKey, list[Comment]]]:
-        """Assigns each comment to its following Option.
+    ) -> OrderedDict[Option, OrderedDict[SlotKey, CommentGroup]]:
+        """Assigns each comment to its following Option. Comments at the end of the section
+        (with no following option) will be assigned to "None".
 
         Args:
             slots (SlotAccess, optional): The slot(s) to use. If multiple are given, will
                 assign the comments per slot.
 
         Returns:
-            OrderedDict[Option,list[Comment]] |
-            OrderedDict[Option,dict[SlotKey,list[Comment]]]: Options as keys.
+            OrderedDict[Option,CommentGroup] |
+            OrderedDict[Option,dict[SlotKey,CommentGroup]]: Options as keys.
                 Value is a dictionary with SlotKeys as keys and the Comments as values.
         """
         slots = self._slots.slot_access(slots)
@@ -397,14 +399,16 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         for slot in slots:
 
             # temp save comments here
-            comments = []
+            comments = CommentGroup()
 
             for entity in self._slots[slot]:
                 if isinstance(entity, Comment):
                     comments.append(entity)
                 elif isinstance(entity, Option):
                     out[entity] = out.get(entity, OrderedDict()) | {slot: comments}
-                    comments = []
+                    comments = CommentGroup()
+            if comments:
+                out[None] = out.get(None, OrderedDict()) | {slot: comments}
 
         return out
 
@@ -653,8 +657,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             slots = self._slots.slot_access(slots, verify=True)
 
         # read file
-        with open(path, "rb") as file:
-            file_content = str(read_from_bytes(file.read()).best())
+        file_content = str(read_from_bytes(Path(path).read_bytes()).best())
 
         current_option: Option | None = None
         # get unnamed section, delete later if undefined and unused
@@ -793,8 +796,8 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 second (if first is None) and so on. If None, will use decider method.
                 Defaults to None.
         """
+        # get slot access for content
         access = self._slots.slot_access(content_slots, verify=True)
-
         if content_slots is None:
             match (decider_method or self._decider_method):
                 case "default":
@@ -806,6 +809,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 case "cascade down":
                     access = list(reversed(access))
 
+        # define structure to use
         _schema_structure = lambda section: section._schema_structure
         _content_structure = lambda section: section[access[0]]
 
@@ -820,8 +824,19 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 )
                 structure = "schema"
 
+        # get markers
         option_delimiter = self._default_parameters.option_delimiters[0]
         entity_delimiter = self._default_parameters.entity_delimiter
+        comment_prefix = self._default_parameters.comment_prefixes[0]
+
+        # define last variables
+        if include_undefined:
+            valid_option = lambda entity: isinstance(entity, Option)
+        else:
+            valid_option = lambda entity: isinstance(entity, Option) and not isinstance(
+                entity, UndefinedOption
+            )
+        big_space: str = entity_delimiter * 2
 
         out = ""
 
@@ -835,37 +850,40 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             if isinstance(sec, SectionMeta):
                 sec = sec()
             elif export_comments:
-                comment_prefix = self._default_parameters.comment_prefixes[0]
                 comments = sec._assign_comments_to_options(slots=access[0])
 
             # add section name
             if (section_name := getattr(sec, SECTION_NAME_VARIABLE)) is not None:
-                out += f"[{section_name}]{entity_delimiter * 2}"
-
-            valid_option = (
-                (lambda entity: isinstance(entity, Option))
-                if include_undefined
-                else (
-                    lambda entity: isinstance(entity, Option)
-                    and not isinstance(entity, UndefinedOption)
-                )
-            )
+                out += f"[{section_name}]{big_space}"
 
             for entity in entities_structure(sec):
                 if valid_option(entity):
+                    # add comments if requested
                     if comments is not None and entity in comments:
-                        out += f"{comment_prefix} {f"{entity_delimiter}{comment_prefix} ".join(
-                                comment.content
-                                for comment in comments[entity].iloc[0][1]
-                            )}{entity_delimiter}"
-                    out += (
-                        f"{entity.key} {option_delimiter} "
-                        f"{next((value for i in access if (value:=entity._slots[i]) is not None),"")}"
-                        f"{entity_delimiter * 2}"
-                    )
+                        out += (
+                            comments[entity]
+                            .iloc[0][1]
+                            .to_string(comment_prefix, entity_delimiter)
+                        )
+                        out += entity_delimiter
 
-        with open(path, "w", encoding="utf-8") as file:
-            file.write(out)
+                    # add option
+                    out += entity.to_string(option_delimiter, slots=access)
+                    out += big_space
+
+            if comments is not None and None in comments:
+                # add comments from end of the section
+                out += (
+                    comments[None]
+                    .iloc[0][1]
+                    .to_string(comment_prefix, entity_delimiter)
+                )
+                out += big_space
+
+        # remove last extra delimiters
+        out = out[: -len(big_space)]
+
+        Path(path).write_text(out, encoding="utf-8")
 
     @copy_doc(_export, annotations=True)
     def export(self, *args, **kwargs) -> ...:

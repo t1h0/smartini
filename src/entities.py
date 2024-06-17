@@ -71,6 +71,17 @@ class Comment:
 
         raise ExtractionError("Comment could not be extracted.")
 
+    def to_string(self, prefix: str | None) -> str:
+        """Create ini string out of the Comment.
+
+        Args:
+            prefix (str | None, optional): Prefix to use for the string. Returns to None.
+
+        Returns:
+            str: The ini string.
+        """
+        return f"{prefix} {self.content}" if prefix is not None else self.content
+
 
 type OptionSlot = Any
 
@@ -125,6 +136,25 @@ class Option(SlotEntity[OptionSlot]):
                 create_missing_slots=True, new_slot_value=value, slots=slot
             )
 
+    def to_string(self, delimiter: OptionDelimiter, *, slots: SlotAccess = None) -> str:
+        """Create an ini string out of the option.
+
+        Args:
+            delimiter (OptionDelimiter): The delimiter to use for separating option key
+                and value.
+            slot (SlotAccess, optional): The slot to get the value from. If multiple are
+                passed, will take the first that is None (or '' if all are None). If None,
+                will take the first that is None of all slots. Defaults to None.
+
+        Returns:
+            str: The ini string.
+        """
+        slots = self._slots.slot_access(slots)
+        value = next(
+            (val for slot in slots if (val := self._slots[slot]) is not None), ""
+        )
+        return f"{self.key} {delimiter} {value}"
+
     @classmethod
     def from_string(
         cls, string: str, delimiter: OptionDelimiter, *, slots: SlotAccess = None
@@ -160,6 +190,22 @@ class Option(SlotEntity[OptionSlot]):
             return cls(key=last_key[0], values=lr[1].strip() or None, slots=slots)
 
         raise ExtractionError("Option could not be extracted.")
+
+
+class CommentGroup(list[Comment]):
+    """Group of comments."""
+
+    def to_string(self, prefix: str, entity_delimiter: str) -> str:
+        """Convert group of Comments to one ini string.
+
+        Args:
+            prefix (str): Prefix for the comments
+            entity_delimiter (str): Entity delimiter to separate the comments.
+
+        Returns:
+            str: The Comments as one string.
+        """
+        return entity_delimiter.join(comment.to_string(prefix) for comment in self)
 
 
 class UndefinedOption(Option):
