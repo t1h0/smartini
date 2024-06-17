@@ -1,15 +1,13 @@
 """Classes related to slot mechanism"""
 
 from typing import Literal, TypeVar, overload, Callable, Generator, Any, Sequence
-from nomopytools.collections import OrderedDict
+from nomopytools.collections_extensions import OrderedDict
 from src.exceptions import (
     SlotNotFound,
     SlotAlreadyExists,
     IniStructureError,
     DuplicateEntityError,
 )
-import warnings
-from src import warn
 
 _VT = TypeVar("_VT")
 T = TypeVar("T")
@@ -351,6 +349,9 @@ class SlotEntity[Slot]:
             self._slots[key] = val
 
 
+StructureItem = TypeVar("StructureItem")
+
+
 class Structure[StructureItem](list[StructureItem]):
 
     def validate_position(self, pos: int) -> bool:
@@ -375,10 +376,10 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
     def _insert_structure_items(
         self,
         items: StructureItem | list[StructureItem],
-        positions: int | list[int],
+        positions: int | list[int] | None = None,
         exist_ok: bool = False,
         *,
-        slots: SlotAccess,
+        slots: SlotAccess = None,
     ) -> None:
         """Insert items into the struture.
 
@@ -386,7 +387,8 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
             items (StructureItem | list[StructureItem]): The item(s) to insert.
             positions (int | list[int | None], optional): Where to put the item(s) in
                 the structure. Either one position for all slots or a list
-                with one position per slot. Defaults to -1 (append to end in every slot).
+                with one position per slot. If None, will append to the end in every slot.
+                Defaults to None.
             exist_ok (bool, optional): Whether to not throw an error if the item already
                 exists in the structure. If True, will simply not insert the item.
                 Defaults to False.
@@ -394,15 +396,21 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
                 Must match positions. Defaults to None.
         """
         slots = self._slots.slot_access(slots, verify=True)
-        positions = self._validate_position(positions, slots)
+        if positions is not None:
+            positions = self._validate_position(positions, slots)
         if not isinstance(items, list):
             items = [items]
         for s, pos in zip(slots, positions):
             if (dupl := set(items).intersection(self._slots[s])) and not exist_ok:
                 raise DuplicateEntityError(f"Items {dupl} already exist.")
-            self._slots[s][pos:pos] = (
-                item for item in items if item not in self._slots[s]
-            )
+            if positions is None:
+                self._slots[s].extend(
+                    item for item in items if item not in self._slots[s]
+                )
+            else:
+                self._slots[s][pos:pos] = (
+                    item for item in items if item not in self._slots[s]
+                )
 
     def _set_structure(
         self,

@@ -1,13 +1,14 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
-from typing import Any, Literal, Self, Callable
+from typing import Any, Literal, Self, Callable, overload
 import itertools
 import re
 from pathlib import Path
 import warnings
 import inspect
 import contextlib
+from charset_normalizer import from_bytes as read_from_bytes
 from src.exceptions import (
     ContinuationError,
     IniStructureError,
@@ -40,6 +41,7 @@ from src.globals import (
 )
 from src.utils import _str_to_var
 from src import warn
+from nomopytools.collections_extensions import OrderedDict
 from nomopytools.func import copy_doc
 
 
@@ -82,27 +84,31 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         self._schema_structure = Structure()
 
         # initialize Options
-        for var, val in vars(self.__class__).items():
-            # every string variable without leading and trailing doublescores
-            # will be interpreted as an option
-            if (
-                not re.fullmatch(r"^__.*__$", var)
-                and isinstance(val, str)
-                and var != SECTION_NAME_VARIABLE
-            ):
-                if var.startswith(INTERNAL_PREFIX):
-                    raise NameError(
-                        f"'{var}' is interpreted as an Option but Option variable names"
-                        f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
-                    )
-                option = Option(key=val)
-                super().__setattr__(var, option)
-                self._schema_structure.append(option)
+        for var, option in self._get_option_variable_names().items():
+            super().__setattr__(var, option)
+            self._schema_structure.append(option)
+
+    @overload
+    def _add_entity(
+        self,
+        entity: UndefinedOption | Option,
+        positions: int | list[int] | None = None,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption: ...
+    @overload
+    def _add_entity(
+        self,
+        entity: Comment,
+        positions: int | list[int] | None = None,
+        *,
+        slots: SlotAccess = None,
+    ) -> Comment: ...
 
     def _add_entity(
         self,
         entity: UndefinedOption | Option | Comment,
-        positions: int | list[int] = -1,
+        positions: int | list[int] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> UndefinedOption | Comment:
@@ -112,7 +118,8 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             entity (UndefinedOption | Option | Comment): The entity to add.
             positions (int | list[int | None], optional): Where to put the entity in
                 the section's structure. Either one position for all slots or a list
-                with one position per slot. Defaults to -1 (append to end in every slot).
+                with one position per slot. If None, will append to the end in every slot.
+                Defaults to None.
             slots (SlotAccess, optional): Slot(s) to add the entity to.
                 Must match positions. Defaults to None.
 
@@ -239,11 +246,11 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         except EntityNotFound:
             try:
                 option = UndefinedOption(slots=slots, **kwargs)
+                option = self._add_entity(option)
             except ExtractionError as ee:
                 raise ValueError(
-                    "Can't add new option because of unsufficient initialization arguemnts."
+                    "Can't add new option because of unsufficient initialization arguments."
                 ) from ee
-            option = self._add_entity(option)
 
         # get position
         validated_positions = self._validate_position(positions, slots)
@@ -266,19 +273,70 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     def set_option(self, *args, **kwargs) -> ...:
         return self._set_option(*args, **kwargs)
 
-    def _get_options(self) -> dict[str, Option]:
-        """Get all options of the section.
+    def _get_options(
+        self, include_undefined: bool = True, *, slots: SlotAccess = None
+    ) -> OrderedDict[str, Option]:
+        """Get options of the section.
+
+        Args:
+            include_undefined (bool, optional): Whether to include undefined options.
+                Will have no effect if slots is None.
+            slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
+                are given, will return the intersection. If None will return all.
+                Defaults to None.
 
         Returns:
-            dict[str, Option]: Variable names as keys and Options as values.
+            OrderedDict[str, Option]: Variable names as keys and Options as values. Order
+                is that of the original schema structure with undefined options at the end.
         """
-        return {
-            name: var for name, var in vars(self).items() if isinstance(var, Option)
+        valid_option = (
+            (lambda x: isinstance(x, Option))
+            if include_undefined
+            else (
+                lambda x: isinstance(x, Option) and not isinstance(x, UndefinedOption)
+            )
+        )
+
+        if slots is None:
+            return OrderedDict(
+                {name: var for name, var in vars(self).items() if valid_option(var)}
+            )
+
+        slots_access = self._slots.slot_access(slots)
+        options_intersection = {
+            opt for slot in self._slots[slots_access] for opt in slot
         }
+
+        return OrderedDict(
+            {
+                name: var
+                for name, var in vars(self).items()
+                if valid_option(var) and var in options_intersection
+            }
+        )
 
     @copy_doc(_get_options, annotations=True)
     def get_options(self, *args, **kwargs) -> ...:
         return self._get_options(*args, **kwargs)
+
+    @classmethod
+    def _get_option_variable_names(cls) -> OrderedDict[str, Option]:
+        out = OrderedDict()
+        for var, val in vars(cls).items():
+            # every string variable without leading and trailing doublescores
+            # will be interpreted as an option
+            if (
+                not re.fullmatch(r"^__.*__$", var)
+                and isinstance(val, str)
+                and var != SECTION_NAME_VARIABLE
+            ):
+                if var.startswith(INTERNAL_PREFIX):
+                    raise NameError(
+                        f"'{var}' is interpreted as an Option but Option variable names"
+                        f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
+                    )
+                out[var] = Option(key=val)
+        return out
 
     def _get_comment_by_content(self, content: str | re.Pattern) -> dict[str, Comment]:
         """Get a comment by its content.
@@ -329,6 +387,38 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             if (cid := re.search(rf"(?<=^{COMMENT_VAR_PREFIX})\d+$", name))
         )
         return COMMENT_VAR_PREFIX + str(comment_ids[-1] + 1 if comment_ids else 0)
+
+    def _assign_comments_to_options(
+        self, *, slots: SlotAccess = None
+    ) -> OrderedDict[Option, OrderedDict[SlotKey, list[Comment]]]:
+        """Assigns each comment to its following Option.
+
+        Args:
+            slots (SlotAccess, optional): The slot(s) to use. If multiple are given, will
+                assign the comments per slot.
+
+        Returns:
+            OrderedDict[Option,list[Comment]] |
+            OrderedDict[Option,dict[SlotKey,list[Comment]]]: Options as keys.
+                Value is a dictionary with SlotKeys as keys and the Comments as values.
+        """
+        slots = self._slots.slot_access(slots)
+
+        out = OrderedDict()
+
+        for slot in slots:
+
+            # temp save comments here
+            comments = []
+
+            for entity in self._slots[slot]:
+                if isinstance(entity, Comment):
+                    comments.append(entity)
+                elif isinstance(entity, Option):
+                    out[entity] = out.get(entity, OrderedDict()) | {slot: comments}
+                    comments = []
+
+        return out
 
 
 class UndefinedSection(Section):
@@ -394,6 +484,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             parameters.update(**kwargs)
         self._default_parameters = parameters
         self._decider_method = method
+        self._slot_decider = SlotDecider(self, self._slots, method)
         self.iloc = SlotIlocViewer(self)
 
     def __getattribute__(self, name: str) -> Any:
@@ -404,7 +495,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             )
         return attr
 
-    def __getitem__(self, key: SlotAccess) -> Self:
+    def __getitem__(self, key: SlotAccess) -> Any:
         return SlotViewer(target=self, slot=key)
 
     def __setitem__(self, *_, **__) -> None:
@@ -443,26 +534,85 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 f"Can't get section '{section_name}' because it doesn't exist."
             ) from e
 
+    @overload
     def _get_sections(
-        self, filled_only: bool = True
-    ) -> dict[str, Section] | dict[str, Section | SectionMeta]:
-        """Get all sections of the ini.
+        self,
+        filled_only: Literal[True] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section]: ...
+    @overload
+    def _get_sections(
+        self,
+        filled_only: Literal[False] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: None = None,
+    ) -> OrderedDict[str, Section | SectionMeta]: ...
+
+    def _get_sections(
+        self,
+        filled_only: bool = True,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]:
+        """Get sections of the ini.
 
         Args:
             filled_only (bool, optional): Whether to only return sections that have
-                been filled with content already. Defaults to True.
+                been filled with content already (by any slot). Defaults to True.
+            include_undefined (bool, optional): Whether to also include undefined options.
+                Defaults to True.
+            slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
+                are given, will return the intersection. If None will return all.
+                Defaults to None.
 
         Returns:
-            dict[str, Section] | dict[str, Section | SectionMeta]: Dicitonary with
-                access (variable) names as keys and the Sections as values.
+            OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]: Variable
+                names as keys and the Sections as values. Order is that of the original
+                schema structure with undefined options at the end.
         """
+        if not filled_only and slots is not None:
+            warnings.warn(
+                "If filled_only is set to False, slots selection is not possible. Will ignore argument 'slots'."
+            )
+            slots = None
+
         if filled_only:
+            section_instances = Section
             iterator = vars(self).items()
-            instances = Section
         else:
-            iterator = itertools.chain(vars(self).items(), vars(self.__class__).items())
-            instances = (Section, SectionMeta)
-        return {var: val for var, val in iterator if isinstance(val, instances)}
+            section_instances = (Section, SectionMeta)
+            iterator = itertools.chain(vars(self.__class__).items(), vars(self).items())
+
+        valid_section = (
+            (lambda x: isinstance(x, section_instances))
+            if include_undefined
+            else (
+                lambda x: isinstance(x, section_instances)
+                and not isinstance(x, UndefinedSection)
+            )
+        )
+
+        if slots is None:
+            return OrderedDict(
+                {name: var for name, var in iterator if valid_section(var)}
+            )
+
+        slots_access = self._slots.slot_access(slots)
+        sections_intersection = {
+            sec for slot in self._slots[slots_access] for sec in slot
+        }
+
+        return OrderedDict(
+            {
+                name: var
+                for name, var in iterator
+                if valid_section(var) and var in sections_intersection
+            }
+        )
 
     @copy_doc(_get_sections, annotations=True)
     def get_sections(self, *args, **kwargs) -> ...:
@@ -518,8 +668,9 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         else:
             slots = self._slots.slot_access(slots, verify=True)
 
-        with open(path, "r") as file:
-            file_content = file.read()
+        # read file
+        with open(path, "rb") as file:
+            file_content = str(read_from_bytes(file.read()).best())
 
         current_option: Option | None = None
         # get unnamed section, delete later if undefined and unused
@@ -624,6 +775,117 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
     @copy_doc(_read_ini, annotations=True)
     def read_ini(self, *args, **kwargs) -> ...:
         return self._read_ini(*args, **kwargs)
+
+    def _export(
+        self,
+        path: str | Path,
+        structure: Literal["schema", "content"] | None = None,
+        decider_method: SlotDeciderMethods | None = None,
+        include_undefined: bool = True,
+        export_comments: bool = False,
+        *,
+        content_slots: SlotAccess = None,
+    ) -> None:
+        """Export the saved configuration to a file.
+
+        Args:
+            path (str | Path): Path to the file to export to.
+            structure ("schema" | "content" | None, optional): Slot to use for
+                structuring the output (including comments). If "schema", will use
+                original schema definition. If "content", will use slot that is used
+                as content slot (if multiple content slots are given will use the first).
+                If None will use "schema" if content_slots is None and "content"
+                otherwise. Defaults to None.
+            decider_method (SlotDeciderMethods | None, optional): Either a decider method
+                to use or None to use the initial decider method. Defaults to None.
+            include_undefined (bool, optional): Whether to include undefined entities.
+                Defaults to True.
+            export_comments (bool, optional): Whether to export comments. Will use first
+                content slot to get comments from. Comments will be matched to following
+                entities (e.g. all comments above option_a will be above option_a in the
+                exported ini). Defaults to False.
+            content_slots (SlotAccess, optional): Slot(s) to use for content (sections
+                and options). If multiple are given, first slot has priority, then
+                second (if first is None) and so on. If None, will use decider method.
+                Defaults to None.
+        """
+        access = self._slots.slot_access(content_slots, verify=True)
+
+        if content_slots is None:
+            match (decider_method or self._decider_method):
+                case "default":
+                    access = [access[-1]] + ([access[0]] if len(access) > 1 else [])
+                case "first":
+                    access = [access[0]]
+                case "latest":
+                    access = [access[-1]]
+                case "cascade down":
+                    access = list(reversed(access))
+
+        _schema_structure = lambda section: section._schema_structure
+        _content_structure = lambda section: section[access[0]]
+
+        match structure:
+            case "schema":
+                entities_structure = _schema_structure
+            case "content":
+                entities_structure = _content_structure
+            case _:
+                entities_structure = (
+                    _schema_structure if content_slots is None else _content_structure
+                )
+                structure = "schema"
+
+        option_delimiter = self._default_parameters.option_delimiters[0]
+        entity_delimiter = self._default_parameters.entity_delimiter
+
+        out = ""
+
+        for sec in self._get_sections(
+            filled_only=structure != "schema",
+            include_undefined=include_undefined,
+            slots=None if structure == "schema" else access,
+        ).values():
+            comments = None
+
+            if isinstance(sec, SectionMeta):
+                sec = sec()
+            elif export_comments:
+                comment_prefix = self._default_parameters.comment_prefixes[0]
+                comments = sec._assign_comments_to_options(slots=access[0])
+
+            # add section name
+            if (section_name := getattr(sec, SECTION_NAME_VARIABLE)) is not None:
+                out += f"[{section_name}]{entity_delimiter * 2}"
+
+            valid_option = (
+                (lambda entity: isinstance(entity, Option))
+                if include_undefined
+                else (
+                    lambda entity: isinstance(entity, Option)
+                    and not isinstance(entity, UndefinedOption)
+                )
+            )
+
+            for entity in entities_structure(sec):
+                if valid_option(entity):
+                    if comments is not None and entity in comments:
+                        out += f"{comment_prefix} {f"{entity_delimiter}{comment_prefix} ".join(
+                                comment.content
+                                for comment in comments[entity].iloc[0][1]
+                            )}{entity_delimiter}"
+                    out += (
+                        f"{entity.key} {option_delimiter} "
+                        f"{next((value for i in access if (value:=entity._slots[i]) is not None),"")}"
+                        f"{entity_delimiter * 2}"
+                    )
+
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(out)
+
+    @copy_doc(_export, annotations=True)
+    def export(self, *args, **kwargs) -> ...:
+        return self._export(*args, **kwargs)
 
     def _get_unnamed_section(self, parameters: Parameters) -> Section | None:
         """Get the unnamed section (always at the beginning of the ini).
@@ -756,13 +1018,12 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         # check if Option is defined
         try:
             option = section._get_option(key=extracted_option.key)
-            # add slot if needed
-
             option._set_slots(
                 new_slot_value=extracted_option.iloc[-1][1],
                 slots=slots,
                 create_missing_slots=True,
             )
+            section._insert_structure_items(option, -1, exist_ok=True)
         except EntityNotFound:
             if parameters.read_undefined in {True, "option"}:
                 # create UndefinedOption
@@ -896,15 +1157,15 @@ class SlotView:
             Callable: A function that mimics the requested Callable but sets the
                 SlotAccess argument to self._slot.
         """
-        access_kwarg = next(
+        access_kwargs = [
             k
             for k, v in inspect.get_annotations(access_target).items()
             if v == SlotAccess
-        )
-        assert isinstance(access_kwarg, str)
+        ]
 
         def accesser_func(*args, **kwargs):
-            kwargs[access_kwarg] = slot
+            for access_kwarg in access_kwargs:
+                kwargs[access_kwarg] = slot
             return access_target(*args, **kwargs)
 
         return accesser_func
@@ -926,12 +1187,12 @@ class SlotView:
 class SlotDecider(SlotView):
 
     def __init__(
-        self, target: Section, slots: Slots, decider_method: SlotDeciderMethods
+        self, target: Schema | Section, slots: Slots, decider_method: SlotDeciderMethods
     ) -> None:
         """Gives access to slots by deciding.
 
         Args:
-            target (Section): The target to prepare for slot access.
+            target (Schema | Section): The target to prepare for slot access.
             slots (Slots): The slots to take as reference.
             decider_method (SlotDeciderMethods): The method to use for decision.
         """
@@ -952,6 +1213,12 @@ class SlotDecider(SlotView):
 
         if isinstance(attr, Option):
             return super().__getattribute__("_decide_slot")(attr)[1]
+        elif isinstance(attr, Section):
+            return SlotDecider(
+                attr,
+                super().__getattribute__("_slots"),
+                super().__getattribute__("_decider_method"),
+            )
         elif (
             not name.startswith("__")
             and callable(attr)
@@ -984,10 +1251,37 @@ class SlotDecider(SlotView):
         decider_method: SlotDeciderMethods = super().__getattribute__("_decider_method")
         slots: Slots = super().__getattribute__("_slots")
 
-        latest_key = slots.iloc[-1][0]
-        first_key = slots.iloc[0][0]
+        return super().__getattribute__("_decision")(
+            target=target, reference_slots=slots, method=decider_method
+        )
 
-        match decider_method:
+    @classmethod
+    def _decision(
+        cls,
+        target: Option | Section,
+        reference_slots: Slots,
+        method: SlotDeciderMethods,
+    ) -> tuple[
+        SlotKey,
+        OptionSlot | Structure,
+    ]:
+        """Decides, which slot to access using the passed decider method and the passed
+        reference slots.
+
+        Args:
+            target (Option | Section): The Option or Section that is to be accessed.
+            reference_slots (Slots): Slots to use as reference.
+            method (SlotDeciderMethods): The method to use for decision making.
+
+        Returns:
+            tuple[SlotKey, OptionSlot | SectionStructure]: Tuple of the target's
+                decided slot's key and value.
+
+        """
+        latest_key = reference_slots.iloc[-1][0]
+        first_key = reference_slots.iloc[0][0]
+
+        match method:
             case "default":
                 latest_val = target._get_slots(latest_key)
                 return (
@@ -997,8 +1291,14 @@ class SlotDecider(SlotView):
                 )
             case "first":
                 return first_key, target._get_slots(first_key)
+            case "cascade up":
+                return next((k, v) for k, v in target._slots.items() if v is not None)
             case "latest":
                 return latest_key, target._get_slots(latest_key)
+            case "cascade down":
+                return next(
+                    (k, v) for k, v in reversed(target._slots.items()) if v is not None
+                )
 
 
 class SlotViewer(SlotView):
@@ -1051,10 +1351,6 @@ class SlotViewer(SlotView):
     def __setattr__(self, name: str, value: Any) -> None:
         slot: SlotAccess = super().__getattribute__("_slot")
         super().__getattribute__("_set_slot")(name, value, slot)
-
-    def _export(self, path: str | Path) -> None:
-        path = Path(path)
-        # TODO
 
 
 class SlotIlocViewer(SlotView):
