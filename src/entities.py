@@ -1,12 +1,12 @@
 """Ini entities are either a section name, an option or a comment."""
 
 from typing import overload, Any, Self, TypeVar
-from dataclasses import dataclass
 import re
 from src.exceptions import ExtractionError
 from src.slots import SlotKey, SlotAccess, SlotEntity
 
 T = TypeVar("T")
+
 
 class Comment:
     """An ini comment."""
@@ -38,9 +38,9 @@ class Comment:
             content_without_prefix (str | None, optional): Content with prefix removed.
                 Should be None if content_with_prefix is provided, otherwise the latter
                 will be ignored. Defaults to None.
-            prefix (str | tuple[str | re.Pattern, ...] | None, optional): One ore more
-                prefixes that can denote the comment (used for content_with_prefix).
-                Defaults to None.
+            prefix (str | re.Pattern | tuple[str | re.Pattern, ...] | None, optional):
+                One or more prefixes that can denote the comment
+                (used for content_with_prefix). Defaults to None.
             content_with_prefix (str | None, optional): Content including prefix.
                 Will be ignored if content_without_prefix is provided. Defaults to None.
         """

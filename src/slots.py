@@ -9,36 +9,43 @@ from src.exceptions import (
     DuplicateEntityError,
 )
 
-_VT = TypeVar("_VT")
 T = TypeVar("T")
 
+SlotDeciderMethods = Literal["default", "first", "cascade up", "latest", "cascade down"]
+"""Method to decide which slot to use.
+    "default": Uses first slot whenever latest slot is None, otherwise latest slot.
+    "first": Uses first slot.
+    "cascape up": Uses the first slot that is not None from first to latest.
+    "latest": Uses latest slot.
+    "cascade down": Uses first slot that is not None from latest to first.    
+"""
 
-SlotDeciderMethods = Literal["default", "first", "latest"]
+SlotKey = int | str
+SlotValue = TypeVar("SlotValue")
+SlotAccess = int | str | list[int | str] | None
+"""Which slot to access. Int or str identifier for a single slot, list[int|str] for
+multiple slots and None for all slots.
+"""
 
-type SlotKey = int | str
-type Slot[T] = T
-type SlotAccess = int | str | list[int | str] | None
-# type SlotTarget = Option
 
+class Slots(OrderedDict[SlotKey, SlotValue]):
 
-class Slots(OrderedDict[SlotKey, _VT]):
-
-    def __init__(self, value_type: type[_VT], *args, **kwargs) -> None:
+    def __init__(self, value_type: type[SlotValue], *args, **kwargs) -> None:
         """Container for slot objects.
 
         Args:
-            value_type (type[_VT]): Type this container's values should have.
+            value_type (type[SlotValue]): Type this container's values should have.
         """
         self._value_type = value_type
         super().__init__(*args, **kwargs)
 
     @overload
-    def __getitem__(self, slots: None | list) -> list[Slot]: ...
+    def __getitem__(self, slots: None | list) -> list[SlotValue]: ...
 
     @overload
-    def __getitem__(self, slots: int | str) -> Slot: ...
+    def __getitem__(self, slots: int | str) -> SlotValue: ...
 
-    def __getitem__(self, slots: SlotAccess) -> list[Slot] | Slot | None:
+    def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue | None:
         if slots is None:
             return list(self.values())
         try:
@@ -99,7 +106,7 @@ class Slots(OrderedDict[SlotKey, _VT]):
 
     def set_slots(
         self,
-        new_slot_value: _VT | None = None,
+        new_slot_value: SlotValue | None = None,
         create_missing_slots=False,
         *,
         slots: SlotAccess = None,
@@ -108,7 +115,7 @@ class Slots(OrderedDict[SlotKey, _VT]):
         """Set the content of specified slots.
 
         Args:
-            new_slot_value (_VT | None, optional): New value all slots should take.
+            new_slot_value (SlotValue | None, optional): New value all slots should take.
                 If None, will access kwargs. Defaults to None.
             slots (SlotAccess, optional): Slots to set. Defaults to None.
             create_missing_slots (bool, optional): Whether to create slots that are
@@ -131,9 +138,9 @@ class Slots(OrderedDict[SlotKey, _VT]):
                 self[slot] = new_slot_value
 
 
-class SlotEntity[Slot]:
+class SlotEntity[SlotValue]:
 
-    def __init__(self, slot_value: type[Slot]) -> None:
+    def __init__(self, slot_value: type[SlotValue]) -> None:
         """Entity which implements slots to save different values.
 
         Args:
@@ -175,7 +182,7 @@ class SlotEntity[Slot]:
 
     def _set_slots(
         self,
-        new_slot_value: Slot | None = None,
+        new_slot_value: SlotValue | None = None,
         create_missing_slots=False,
         *,
         slots: SlotAccess = None,
@@ -184,7 +191,7 @@ class SlotEntity[Slot]:
         """Set the content of specified slots.
 
         Args:
-            new_slot_value (Slot | None, optional): New value all slots should take.
+            new_slot_value (SlotValue | None, optional): New value all slots should take.
                 If None, will access kwargs. Defaults to None.
             slots (SlotAccess, optional): Slots to set. Defaults to None.
             create_missing_slots (bool, optional): Whether to create slots that are
@@ -199,12 +206,12 @@ class SlotEntity[Slot]:
         )
 
     @overload
-    def __getitem__(self, slots: None | list) -> list[Slot]: ...
+    def __getitem__(self, slots: None | list) -> list[SlotValue]: ...
 
     @overload
-    def __getitem__(self, slots: int | str) -> Slot: ...
+    def __getitem__(self, slots: int | str) -> SlotValue: ...
 
-    def __getitem__(self, slots: SlotAccess) -> list[Slot] | Slot | None:
+    def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue | None:
         return self._slots[slots]
 
     def __setitem__(self, slots: SlotAccess, value: Any) -> None:
@@ -219,7 +226,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[Slot], T],
+        func: Callable[[SlotValue], T],
         _id: None = ...,
         inplace: Literal[False] = ...,
         *,
@@ -228,7 +235,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[int, Slot], T],
+        func: Callable[[int, SlotValue], T],
         _id: Literal["index"] = ...,
         inplace: Literal[False] = ...,
         *,
@@ -237,7 +244,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[SlotKey, Slot], T],
+        func: Callable[[SlotKey, SlotValue], T],
         _id: Literal["key"] = ...,
         inplace: Literal[False] = ...,
         *,
@@ -246,7 +253,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[SlotKey, int, Slot], T],
+        func: Callable[[SlotKey, int, SlotValue], T],
         _id: Literal["both"] = ...,
         inplace: Literal[False] = ...,
         *,
@@ -255,7 +262,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[Slot], Slot],
+        func: Callable[[SlotValue], SlotValue],
         _id: None = ...,
         inplace: Literal[True] = ...,
         *,
@@ -264,7 +271,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[int, Slot], Slot],
+        func: Callable[[int, SlotValue], SlotValue],
         _id: Literal["index"] = ...,
         inplace: Literal[True] = ...,
         *,
@@ -273,7 +280,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[SlotKey, Slot], Slot],
+        func: Callable[[SlotKey, SlotValue], SlotValue],
         _id: Literal["key"] = ...,
         inplace: Literal[True] = ...,
         *,
@@ -282,7 +289,7 @@ class SlotEntity[Slot]:
     @overload
     def _apply_to_slots(
         self,
-        func: Callable[[SlotKey, int, Slot], Slot],
+        func: Callable[[SlotKey, int, SlotValue], SlotValue],
         _id: Literal["both"] = ...,
         inplace: Literal[True] = ...,
         *,
@@ -292,20 +299,20 @@ class SlotEntity[Slot]:
     def _apply_to_slots(
         self,
         func: (
-            Callable[[Slot], T]
-            | Callable[[int, Slot], T]
-            | Callable[[SlotKey, Slot], T]
-            | Callable[[SlotKey, int, Slot], Slot]
-            | Callable[[Slot], Slot]
-            | Callable[[int, Slot], Slot]
-            | Callable[[SlotKey, Slot], Slot]
-            | Callable[[SlotKey, int, Slot], Slot]
+            Callable[[SlotValue], T]
+            | Callable[[int, SlotValue], T]
+            | Callable[[SlotKey, SlotValue], T]
+            | Callable[[SlotKey, int, SlotValue], SlotValue]
+            | Callable[[SlotValue], SlotValue]
+            | Callable[[int, SlotValue], SlotValue]
+            | Callable[[SlotKey, SlotValue], SlotValue]
+            | Callable[[SlotKey, int, SlotValue], SlotValue]
         ),
         _id: Literal["key", "index", "both"] | None = None,
         inplace=False,
         *,
         slots: SlotAccess = None,
-    ) -> Generator[T, None, None] | Generator[Slot, None, None] | None:
+    ) -> Generator[T, None, None] | Generator[SlotValue, None, None] | None:
         """Apply function to slots.
 
         Args:

@@ -1,7 +1,7 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
-from typing import Any, Literal, Self, Callable, overload
+from typing import Any, Literal, Self, Callable
 import itertools
 import re
 from pathlib import Path
@@ -87,23 +87,6 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         for var, option in self._get_option_variable_names().items():
             super().__setattr__(var, option)
             self._schema_structure.append(option)
-
-    @overload
-    def _add_entity(
-        self,
-        entity: UndefinedOption | Option,
-        positions: int | list[int] | None = None,
-        *,
-        slots: SlotAccess = None,
-    ) -> UndefinedOption: ...
-    @overload
-    def _add_entity(
-        self,
-        entity: Comment,
-        positions: int | list[int] | None = None,
-        *,
-        slots: SlotAccess = None,
-    ) -> Comment: ...
 
     def _add_entity(
         self,
@@ -321,6 +304,11 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
     @classmethod
     def _get_option_variable_names(cls) -> OrderedDict[str, Option]:
+        """Get varibale names of all options this section owns.
+
+        Returns:
+            OrderedDict[str, Option]: Variable names as keys, Options as values.
+        """
         out = OrderedDict()
         for var, val in vars(cls).items():
             # every string variable without leading and trailing doublescores
@@ -467,10 +455,10 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         Args:
             parameters (Parameters | None, optional): Default parameters for reading and
                 writing inis, as an Parameters object. Parameters can also be passed
-                as kwargs. Missing parameters (because parameters is None and no or not
-                enough kwargs are passed) will be taken from default Parameters
-                (see doc of Parameters). Defaults to None.
-            method ("default" | "first" | "latest", optional): Method for choosing
+                as kwargs. Missing parameters (no or not enough kwargs are passed)
+                will be taken from default Parameters (see doc of Parameters).
+                Defaults to None.
+            method ("default" | "first" | "cascade up" | "latest", optional): Method for choosing
                 the slot. "default" will use slot 0 whenenver latest slot is None,
                 "first" will use first slot, "latest" the last slot that was added.
                 Defaults to "default".
@@ -516,6 +504,19 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
     def _get_section(
         self, section_name: SectionName | str | None, filled_only: bool = True
     ) -> tuple[str, Section | SectionMeta]:
+        """Get a section by its name.
+
+        Args:
+            section_name (SectionName | str | None): The name of the section to get.
+            filled_only (bool, optional): Whether to only look for sections that are
+                already filled with content. Defaults to True.
+
+        Raises:
+            EntityNotFound: If the section was not found by its name.
+
+        Returns:
+            tuple[str, Section | SectionMeta]: Tuple of variable name and section object.
+        """
         if filled_only:
             iterator = vars(self).items()
             instances = Section
@@ -533,23 +534,6 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             raise EntityNotFound(
                 f"Can't get section '{section_name}' because it doesn't exist."
             ) from e
-
-    @overload
-    def _get_sections(
-        self,
-        filled_only: Literal[True] = ...,
-        include_undefined: bool = True,
-        *,
-        slots: SlotAccess = None,
-    ) -> OrderedDict[str, Section]: ...
-    @overload
-    def _get_sections(
-        self,
-        filled_only: Literal[False] = ...,
-        include_undefined: bool = True,
-        *,
-        slots: None = None,
-    ) -> OrderedDict[str, Section | SectionMeta]: ...
 
     def _get_sections(
         self,
@@ -913,18 +897,18 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         return section
 
-    def _extract_section_name(self, entity: str) -> SectionName | None:
-        """Extract a section name if present in entity.
+    def _extract_section_name(self, line: str) -> SectionName | None:
+        """Extract a section name if present in line.
 
         Args:
-            entity (str): The entity to extract the section from.
+            line (str): The line to extract the section from.
 
         Returns:
             SectionName | None: The extracted section name or None if no section name
-                was found in entity.
+                was found in line.
         """
         try:
-            return SectionName(name_with_brackets=entity)
+            return SectionName(name_with_brackets=line)
         except ExtractionError:
             return None
 
@@ -975,21 +959,21 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         return section
 
     def _extract_option(
-        self, entity: str, parameters: Parameters, *, slots: SlotAccess
+        self, line: str, parameters: Parameters, *, slots: SlotAccess
     ) -> Option | None:
-        """Extract an option if present in entity.
+        """Extract an option if present in line.
 
         Args:
-            entity (str): The entity to extract the section from.
+            line (str): The line to extract the section from.
             parameters (Parameters): Ini read and write parameters.
             slots (SlotAccess): Slot(s) the new option should have.
 
         Returns:
-            Option | None: The extracted option or None if no option was found in entity.
+            Option | None: The extracted option or None if no option was found in line.
         """
         try:
             return Option.from_string(
-                string=entity, delimiter=parameters.option_delimiters, slots=slots
+                string=line, delimiter=parameters.option_delimiters, slots=slots
             )
         except ExtractionError:
             return None
@@ -1033,21 +1017,19 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         return option
 
-    def _extract_comment(self, entity: str, parameters: Parameters) -> Comment | None:
-        """Extract an comment if present in entity.
+    def _extract_comment(self, line: str, parameters: Parameters) -> Comment | None:
+        """Extract an comment if present in line.
 
         Args:
-            entity (str): The entity to extract the section from.
+            line (str): The line to extract the section from.
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
             Comment | None: The extracted comment or None if no comment
-                was found in entity.
+                was found in line.
         """
         try:
-            return Comment(
-                prefix=parameters.comment_prefixes, content_with_prefix=entity
-            )
+            return Comment(prefix=parameters.comment_prefixes, content_with_prefix=line)
         except ExtractionError:
             return None
 
@@ -1070,39 +1052,39 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         return extracted_comment
 
     def _check_for_possible_continuation(
-        self, entity: str, current_option: Option | None, parameters: Parameters
+        self, line: str, current_option: Option | None, parameters: Parameters
     ) -> tuple[str, bool]:
-        """Check if entity is a possible continuation and remove the continuation prefix
-        from the entity.
+        """Check if line is a possible continuation and remove the continuation prefix
+        from the line.
 
         Args:
-            entity (str): The entity to check.
+            line (str): The line to check.
             current_option (Option | None): The current option.
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
-            tuple[str, bool]: The entity with the continuation prefix removed (if
-            possible continuation) and a boolean indicating if the entity is a possible
-            continuation.
+            tuple[str, bool]: The line with the continuation prefix removed (if
+                possible continuation) and a boolean indicating if the line is a possible
+                continuation.
         """
         continuation = None
         if parameters.continuation_allowed and current_option:
             # if no last option it can't be a continuation
-            continuation = self._extract_continuation(entity, parameters)
+            continuation = self._extract_continuation(line, parameters)
         is_continuation = continuation is not None
-        return (continuation if is_continuation else entity, is_continuation)
+        return (continuation if is_continuation else line, is_continuation)
 
-    def _extract_continuation(self, entity: str, parameters: Parameters) -> str | None:
-        """Extract a possible continuation from an entity.
+    def _extract_continuation(self, line: str, parameters: Parameters) -> str | None:
+        """Extract a possible continuation from a line.
 
         Args:
-            entity (str): The entity.
+            line (str): The line.
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
             str: The continuation or None if continuation was not found.
         """
-        continuation = re.search(rf"(?<=^{parameters.continuation_prefix}).*", entity)
+        continuation = re.search(rf"(?<=^{parameters.continuation_prefix}).*", line)
         return None if continuation is None else continuation[0]
 
     def _handle_continuation(
@@ -1143,6 +1125,11 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
 class SlotView:
 
     def __init__(self, target: Schema | Section) -> None:
+        """Parent class for slot access.
+
+        Args:
+            target (Schema | Section): The target that is accessed.
+        """
         super().__setattr__("_target", target)
         super().__setattr__("_slot_views", {})
 
@@ -1171,6 +1158,16 @@ class SlotView:
         return accesser_func
 
     def _set_slot(self, name: str, value: Any, slot: SlotAccess) -> None:
+        """Set the slot(s) of an option.
+
+        Args:
+            name (str): Variable name of the optino.
+            value (Any): The new option value.
+            slot (SlotAccess): Slot(s) to set.
+
+        Raises:
+            AttributeError: If any other than in option is tried to be set.
+        """
         target, attr = super().__getattribute__("_get_target_attr")(name)
         if not (isinstance(attr, Option) and isinstance(target, Section)):
             raise AttributeError("Assignment only valid for options.")
@@ -1179,6 +1176,14 @@ class SlotView:
         )(name=name, value=value)
 
     def _get_target_attr(self, name: str) -> tuple[Schema | Section, Any]:
+        """Get target of the SlotView and an attribute of the target.
+
+        Args:
+            name (str): Variable name of the attribute.
+
+        Returns:
+            tuple[Schema | Section, Any]: Target and the attribute.
+        """
         target = super().__getattribute__("_target")
         attr = target.__dict__.get(name, None) or getattr(target, name)
         return (target, attr)
@@ -1201,14 +1206,6 @@ class SlotDecider(SlotView):
         super().__setattr__("_slots", slots)
 
     def __getattribute__(self, name: str) -> Any:
-        if name in {
-            "__getattribute__",
-            "__setattr__",
-            "__init__",
-            "__new__",
-            "__call__",
-        }:
-            return super().__getattribute__(name)
         target, attr = super().__getattribute__("_get_target_attr")(name)
 
         if isinstance(attr, Option):

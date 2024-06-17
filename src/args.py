@@ -74,6 +74,7 @@ class Parameters:
         self.validate_parameters(*kwargs.keys())
 
     def validate_parameters(self, *params) -> None:
+        """Validate parameters for correct functionality."""
         if not params or "entity_delimiter" in params:
             self.entity_delimiter = (
                 self.entity_delimiter.pattern

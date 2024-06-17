@@ -228,29 +228,55 @@ class Schema:
 
     @overload
     @classmethod
-    def _get_sections(cls, filled_only: Literal[True] = ...) -> dict[str, Section]: ...
+    def _get_sections(
+        cls,
+        filled_only: Literal[True] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section]: ...
     @overload
     @classmethod
     def _get_sections(
-        cls, filled_only: Literal[False] = ...
-    ) -> dict[str, Section | SectionMeta]: ...
-    @overload
-    @classmethod
-    def get_sections(cls, filled_only: Literal[True] = ...) -> dict[str, Section]: ...
+        cls,
+        filled_only: Literal[False] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section | SectionMeta]: ...
     @overload
     @classmethod
     def get_sections(
-        cls, filled_only: Literal[False] = ...
-    ) -> dict[str, Section | SectionMeta]:
+        cls,
+        filled_only: Literal[True] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section]: ...
+    @overload
+    @classmethod
+    def get_sections(
+        cls,
+        filled_only: Literal[False] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section | SectionMeta]:
         """Get all sections of the ini.
 
         Args:
             filled_only (bool, optional): Whether to only return sections that have
                 been filled with content already. Defaults to True.
+            include_undefined (bool, optional): Whether to also include undefined options.
+                Defaults to True.
+            slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
+                are given, will return the intersection. If None will return all.
+                Defaults to None.
 
         Returns:
-            dict[str, Section] | dict[str, Section | SectionMeta]: Dicitonary with
-                access (variable) names as keys and the Sections as values.
+            OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]:
+                OrderedDict with access (variable) names as keys and the Sections
+                as values.
         """
 
     @classmethod
