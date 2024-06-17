@@ -405,6 +405,8 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
         slots = self._slots.slot_access(slots, verify=True)
         if positions is not None:
             positions = self._validate_position(positions, slots)
+        else:
+            positions = [None]
         if not isinstance(items, list):
             items = [items]
         for s, pos in zip(slots, positions):

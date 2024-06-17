@@ -1048,7 +1048,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 (as of now the input Comment object).
 
         """
-        section._add_entity(extracted_comment, positions=-1, slots=slots)
+        section._add_entity(extracted_comment, positions=None, slots=slots)
         return extracted_comment
 
     def _check_for_possible_continuation(
