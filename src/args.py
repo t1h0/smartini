@@ -10,11 +10,14 @@ class Parameters:
         comment_prefixes: str | re.Pattern | tuple[str | re.Pattern, ...] = ";",
         option_delimiters: str | re.Pattern | tuple[str | re.Pattern, ...] = "=",
         continuation_allowed: bool = True,
-        continuation_prefix: str | re.Pattern = re.compile("\t"),
-        continuation_ignore: tuple[
-            Literal["section", "option", "comment"],
-            ...,
-        ] = (),
+        continuation_prefix: str | re.Pattern | None = re.compile("\t"),
+        continuation_ignore: (
+            tuple[
+                Literal["section_name", "option_delimiter", "comment_prefix"],
+                ...,
+            ]
+            | None
+        ) = (),
         ignore_whitespace_lines: bool = True,
         read_undefined: bool | Literal["section", "option"] = False,
     ) -> None:
@@ -31,14 +34,14 @@ class Parameters:
                 given, the first will be taken for writing. Defaults to "=".
             continuation_allowed (bool, optional): Whether continuation of options
                 (i.e. multiline options) are allowed. Defaults to True.
-            continuation_prefix (str | re.Pattern, optional): Prefix to denote options'
-                value continuations. Defaults to re.Pattern("\t") (TAB character).
-            continuation_ignore (tuple["section" | "option" | "comment", ...], optional):
-                Entities to ignore while continuing an option's value.
-                I.e. will interpret detected entities as continuation of the
-                preceeding option's value if continuation rules are met (see other
-                continuation arguments). Defaults to empty tuple (:= interpret all
-                detected entities as new entities).
+            continuation_prefix (str | re.Pattern | None, optional): Prefix to denote
+                options' value continuations. Defaults to re.Pattern("\t") (TAB character).
+            continuation_ignore (tuple["section_name" | "option_delimiter" |
+                "comment_prefix", ...] | None, optional): Entitiy identifier to ignore
+                while continuing an option's value. Otherwise those identifiers will be
+                interpreted as a new entity instead of a continuation (despite possibly
+                satisfying continuation rules). Defaults to None (:= interpret
+                all detected entities as new entities).
             ignore_whitespace_lines (bool, optional): Whether to interpret lines with
                 only whitespace characters (space or tab) as empty lines.
                 Defaults to True.
@@ -95,7 +98,16 @@ class Parameters:
 
         if not params or "continuation_prefix" in params:
             self.continuation_prefix = (
-                self.continuation_prefix.pattern
-                if isinstance(self.continuation_prefix, re.Pattern)
-                else re.escape(self.continuation_prefix)
+                ""
+                if self.continuation_prefix is None
+                else (
+                    self.continuation_prefix.pattern
+                    if isinstance(self.continuation_prefix, re.Pattern)
+                    else re.escape(self.continuation_prefix)
+                )
             )
+
+        if (
+            not params or "continuation_ignore" in params
+        ) and self.continuation_ignore is None:
+            self.continuation_ignore = ()

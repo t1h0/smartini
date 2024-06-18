@@ -1120,6 +1120,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             lambda val: (
                 [*val, continuation] if isinstance(val, list) else [val, continuation]
             ),
+            inplace=True,
             slots=slots,
         )
 
