@@ -51,7 +51,7 @@ class SectionMeta(type):
     via '_name' class variable.
     """
 
-    # name of the section. must be provided!
+    # name of the section. defaults to class name.
     _name: str | None
 
     def __new__(cls, __name: str, __bases: tuple, __dict: dict):
@@ -63,16 +63,13 @@ class SectionMeta(type):
             and __name != "UndefinedSection"
             and SECTION_NAME_VARIABLE not in __dict
         ):
-            raise AttributeError(
-                f"Class '{__name}' must define section name as '{SECTION_NAME_VARIABLE}'"
-                " class attribute."
-            )
+            __dict[SECTION_NAME_VARIABLE] = __name
         return super().__new__(cls, __name, __bases, __dict)
 
 
 class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
-    # name of the section. must be provided!
+    # name of the section. defaults to class name.
     _name: str | None
 
     def __init__(self) -> None:
