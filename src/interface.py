@@ -255,26 +255,36 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         return self._set_option(*args, **kwargs)
 
     def _get_options(
-        self, include_undefined: bool = True, *, slots: SlotAccess = None
+        self,
+        include_undefined: bool | Literal["only"] = True,
+        *,
+        slots: SlotAccess = None,
     ) -> OrderedDict[str, Option]:
         """Get options of the section.
 
         Args:
-            include_undefined (bool, optional): Whether to include undefined options.
-                Will have no effect if slots is None.
+            include_undefined (bool | "only", optional): Whether to include undefined
+                options. If "only", will return only undefined options. Always False
+                if slots is not None.
             slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
                 are given, will return the intersection. If None will return all.
                 Defaults to None.
 
         Returns:
             OrderedDict[str, Option]: Variable names as keys and Options as values. Order
-                is that of the original schema structure with undefined options at the end.
+                is that of the slot structure if len(slots) == 1. Otherwise, order matches
+                original schema structure with undefined options at the end.
         """
         valid_option = (
-            (lambda x: isinstance(x, Option))
-            if include_undefined
+            (lambda x: isinstance(x, UndefinedOption))
+            if include_undefined == "only"
             else (
-                lambda x: isinstance(x, Option) and not isinstance(x, UndefinedOption)
+                (lambda x: isinstance(x, Option))
+                if include_undefined
+                else (
+                    lambda x: isinstance(x, Option)
+                    and not isinstance(x, UndefinedOption)
+                )
             )
         )
 
@@ -284,10 +294,22 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             )
 
         slots_access = self._slots.slot_access(slots)
+
+        if len(slots_access) == 1:
+            # return options in order of slot structure
+            return {
+                k: v
+                for opt in self._slots[slots_access][0]
+                if valid_option(opt)
+                for k, v in vars(self).items()
+                if v == opt
+            }
+
         options_intersection = {
             opt for slot in self._slots[slots_access] for opt in slot
         }
 
+        # return options in order of original schema structure
         return OrderedDict(
             {
                 name: var
@@ -548,16 +570,17 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         Args:
             filled_only (bool, optional): Whether to only return sections that have
                 been filled with content already (by any slot). Defaults to True.
-            include_undefined (bool, optional): Whether to also include undefined options.
+            include_undefined (bool, optional): Whether to also include undefined sections.
                 Defaults to True.
-            slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
-                are given, will return the intersection. If None will return all.
-                Defaults to None.
+            slots (SlotAccess, optional): Which slot(s) to get sections from. If
+                multiple are given, will return the intersection. If None will
+                return all. Defaults to None.
 
         Returns:
             OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]: Variable
-                names as keys and the Sections as values. Order is that of the original
-                schema structure with undefined options at the end.
+                names as keys and the Sections as values.  Order is that of the slot
+                structure if len(slots) == 1. Otherwise, order matches original schema
+                structure with undefined sections at the end.
         """
         if not filled_only and slots is not None:
             warnings.warn(
@@ -587,10 +610,22 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             )
 
         slots_access = self._slots.slot_access(slots)
+
+        if len(slots_access) == 1:
+            # return sections in order of slot structure
+            return {
+                k: v
+                for sec in self._slots[slots_access][0]
+                if valid_section(sec)
+                for k, v in vars(self).items()
+                if v == sec
+            }
+
         sections_intersection = {
             sec for slot in self._slots[slots_access] for sec in slot
         }
 
+        # return sections in order of original schema structure
         return OrderedDict(
             {
                 name: var
