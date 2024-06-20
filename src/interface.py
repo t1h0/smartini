@@ -20,7 +20,7 @@ from src.entities import (
     Comment,
     CommentGroup,
     Option,
-    OptionSlot,
+    OptionValue,
     SectionName,
     UndefinedOption,
 )
@@ -89,7 +89,7 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     def _add_entity(
         self,
         entity: UndefinedOption | Option | Comment,
-        positions: int | list[int] | None = None,
+        positions: int | list[int | None] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> UndefinedOption | Comment:
@@ -97,10 +97,10 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
         Args:
             entity (UndefinedOption | Option | Comment): The entity to add.
-            positions (int | list[int | None], optional): Where to put the entity in
-                the section's structure. Either one position for all slots or a list
-                with one position per slot. If None, will append to the end in every slot.
-                Defaults to None.
+            positions (int | list[int | None] | None): Position in slots the entity
+                should take. Either int for same position in all slots or one position
+                per slot. If None and for every slot that None is specified for,
+                will append to slots. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to add the entity to.
                 Must match positions. Defaults to None.
 
@@ -128,7 +128,7 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         super().__setattr__(varname, entity)
 
         # add to structure
-        self._insert_structure_items(entity, positions, slots=slots)
+        self._set_structure_items(items=entity, positions=positions, slots=slots)
 
         return entity
 
@@ -150,7 +150,9 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
         Args:
             name (str | None, optional): Name of the option variable. Defaults to None.
-            key (SlotKey | None, optional): The option key. Defaults to None.
+            key (SlotKey | None, optional): The option key. Will be ignored if name is
+                not None. Defaults to None.
+
         Returns:
             Option: The requested option.
         """
@@ -183,77 +185,6 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     def get_option(self, *args, **kwargs) -> ...:
         return self._get_option(*args, **kwargs)
 
-    def _set_option(
-        self,
-        name: str | None,
-        positions: int | list[int | None] | None = None,
-        key: str | None = None,
-        *,
-        slots: SlotAccess = None,
-        **kwargs,
-    ) -> None:
-        """Set an option's value by accessing it via variable name or option key.
-
-        Args:
-            name (str | None): The variable name of the option. Must be None if key
-                should be used.
-            positions (int | list[int | None] | None): Position in slots the option
-                should take. Either int for same position in all slots or one position
-                per slot. If None and for every slot that None is specified as the
-                position, will take previous position of the Option in the respective
-                slot and will append to slots where Option didn't exist before.
-                Defaults to None.
-            key (str | None, optional): The option key. Defaults to None.
-            slots (SlotAccess, optional): The slot to use. Defaults to None (all slots).
-            **kwargs: Keyword-arguments corresponding to OptionSlot attributes.
-        """
-        if key is None:
-            if name is None:
-                raise ValueError("Need name or key for option setting.")
-        elif name is not None:
-            warnings.warn("Key passed but name is not None. Taking name.")
-
-        # get slots
-        slots = self._slots.slot_access(slots, verify=True)
-
-        # get option
-        try:
-            option: Option = self._get_option(name, key)
-            # set args
-            # catch manipulation warning because it doesn't apply here
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message=warn.slot_manipulation)
-                option._set_slots(slots=slots, add_missing_slots=True, **kwargs)
-        except EntityNotFound:
-            try:
-                option = UndefinedOption(slots=slots, **kwargs)
-                option = self._add_entity(option)
-            except ExtractionError as ee:
-                raise ValueError(
-                    "Can't add new option because of unsufficient initialization arguments."
-                ) from ee
-
-        # get position
-        validated_positions = self._validate_position(positions, slots)
-
-        # make sure option is in all requested slot structures
-        # and adjust positions if needed
-        for slot, pos in zip(slots, validated_positions):
-            structure = self._slots[slot]
-            # get position of option in structure
-            try:
-                option_index = structure.index(option)
-                if pos is not None and pos != option_index:
-                    # option exists in structure but has to be moved
-                    structure.insert(pos, structure.pop(option_index))
-            except ValueError:
-                # option doesn't exist in structure
-                structure.insert(-1 if pos is None else pos, option)
-
-    @copy_doc(_set_option, annotations=True)
-    def set_option(self, *args, **kwargs) -> ...:
-        return self._set_option(*args, **kwargs)
-
     def _get_options(
         self,
         include_undefined: bool | Literal["only"] = True,
@@ -266,7 +197,7 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             include_undefined (bool | "only", optional): Whether to include undefined
                 options. If "only", will return only undefined options. Always False
                 if slots is not None.
-            slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
+            slots (SlotAccess, optional): Which slot(s) to get options from. If multiple
                 are given, will return the intersection. If None will return all.
                 Defaults to None.
 
@@ -345,6 +276,62 @@ class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                     )
                 out[var] = Option(key=val)
         return out
+
+    def _set_option(
+        self,
+        name: str | None,
+        value: OptionValue,
+        positions: int | list[int | None] | None = None,
+        key: str | None = None,
+        *,
+        slots: SlotAccess = None,
+    ) -> None:
+        """Set an option's value by accessing it via variable name or option key.
+
+        Args:
+            name (str | None): The variable name of the option. Must be None if key
+                should be used.
+            value (OptionValue): The new value for the option.
+            positions (int | list[int | None] | None): Position in slots the entity
+                should take. Either int for same position in all slots or one position
+                per slot. If None and for every slot that None is specified for,
+                will take previous position of the Option in the respective slot and
+                will append to slots where Option didn't exist before.
+                Defaults to None.
+            key (str | None, optional): The option key. Will be ignored if name
+                is not None. Defaults to None.
+            slots (SlotAccess, optional): The slot to use. Defaults to None (all slots).
+        """
+        if key is None:
+            if name is None:
+                raise ValueError("Need name or key for option setting.")
+        elif name is not None:
+            warnings.warn("Key passed but name is not None. Taking name.")
+
+        # get option
+        try:
+            option: Option = self._get_option(name, key)
+        except EntityNotFound:
+            try:
+                option = UndefinedOption(values=value, slots=slots)
+                self._add_entity(option, slots=slots, positions=positions)
+                return
+            except ExtractionError as ee:
+                raise ValueError(
+                    "Can't add new option because of insufficient initialization arguments."
+                ) from ee
+
+        # set option value
+        option._set_slots(new_slot_value=value, slots=slots, add_missing_slots=True)
+
+        # set stucture position
+        self._set_structure_items(
+            items=option, positions=positions, exist_action="move_not_None", slots=slots
+        )
+
+    @copy_doc(_set_option, annotations=True)
+    def set_option(self, *args, **kwargs) -> ...:
+        return self._set_option(*args, **kwargs)
 
     def _get_comment_by_content(self, content: str | re.Pattern) -> dict[str, Comment]:
         """Get a comment by its content.
@@ -513,7 +500,8 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         raise TypeError("Schema doesn't support item assignment.")
 
     def _with_slot(self, slot: SlotAccess) -> Self:
-        """Access the ini using a specific slot.
+        """Access the ini using a specific slot. Equivalent to item access via brackets
+        (i.e. Schema[slot]).
 
         Args:
             slot (SlotAccess): The slot to use.
@@ -531,8 +519,9 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         Args:
             section_name (SectionName | str | None): The name of the section to get.
-            filled_only (bool, optional): Whether to only look for sections that are
-                already filled with content. Defaults to True.
+            filled_only (bool, optional): Whether to only look for sections that have been
+                already read from a file (:= filled with content) into any slot.
+                Defaults to True.
 
         Raises:
             EntityNotFound: If the section was not found by its name.
@@ -558,6 +547,10 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 f"Can't get section '{section_name}' because it doesn't exist."
             ) from e
 
+    @copy_doc(_get_section, annotations=True)
+    def get_section(self, *args, **kwargs) -> ...:
+        return self._get_section(*args, **kwargs)
+
     def _get_sections(
         self,
         filled_only: bool = True,
@@ -565,21 +558,22 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]:
-        """Get sections of the ini.
+        """Get configuration section(s).
 
         Args:
-            filled_only (bool, optional): Whether to only return sections that have
-                been filled with content already (by any slot). Defaults to True.
+            filled_only (bool, optional): Whether to only return sections that have been
+                already read from a file (:= filled with content) into any slot.
+                Defaults to True.
             include_undefined (bool, optional): Whether to also include undefined sections.
                 Defaults to True.
             slots (SlotAccess, optional): Which slot(s) to get sections from. If
-                multiple are given, will return the intersection. If None will
+                multiple are given, will return the intersection. If None, will
                 return all. Defaults to None.
 
         Returns:
             OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]: Variable
                 names as keys and the Sections as values.  Order is that of the slot
-                structure if len(slots) == 1. Otherwise, order matches original schema
+                structure if len(slots) == 1. Otherwise, order matches defined schema
                 structure with undefined sections at the end.
         """
         if not filled_only and slots is not None:
@@ -1002,7 +996,9 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             setattr(self, section_var, section)
 
         # make sure section is in slots
-        self._insert_structure_items(section, -1, exist_ok=True, slots=slots)
+        self._set_structure_items(
+            items=section, positions=None, exist_action="ignore", slots=slots
+        )
         # add slot to section
         section._add_slots(keys=slots, exist_ok=True)
 
@@ -1035,7 +1031,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         section: Section,
         *,
         slots: SlotAccess,
-    ) -> Option | None:
+    ) -> UndefinedOption | Option | None:
         """Handle an extracted Option.
 
         Args:
@@ -1045,9 +1041,9 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             slot (SlotAccess): Slot(s) to save option values in and add to the section.
 
         Returns:
-            Option | None: The final Option in the section (differs from input) or None
-                if Option could not be handled (e.g. due to undefined and undefined not
-                allowed in parameters).
+            UndefinedOption | Option | None: The final Option in the section
+                (differs from input) or None if Option could not be handled
+                (e.g. due to undefined and undefined not allowed in parameters).
         """
         # check if Option is defined
         try:
@@ -1057,7 +1053,9 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 slots=slots,
                 create_missing_slots=True,
             )
-            section._insert_structure_items(option, -1, exist_ok=True)
+            section._set_structure_items(
+                items=option, positions=None, exist_action="ignore", slots=slots
+            )
         except EntityNotFound:
             if parameters.read_undefined in {True, "option"}:
                 # create UndefinedOption
@@ -1284,7 +1282,7 @@ class SlotDecider(SlotView):
 
     def _decide_slot(self, target: Option | Section) -> tuple[
         SlotKey,
-        OptionSlot | Structure,
+        OptionValue | Structure,
     ]:
         """Decides, which slot to access using the defined decider method.
 
@@ -1292,7 +1290,7 @@ class SlotDecider(SlotView):
             target (Option | Section): The Option or Section that is to be accessed.
 
         Returns:
-            tuple[SlotKey, OptionSlot | SectionStructure]: Tuple of the target's
+            tuple[SlotKey, OptionValue | SectionStructure]: Tuple of the target's
                 decided slot's key and value.
 
         """
@@ -1311,7 +1309,7 @@ class SlotDecider(SlotView):
         method: SlotDeciderMethods,
     ) -> tuple[
         SlotKey,
-        OptionSlot | Structure,
+        OptionValue | Structure,
     ]:
         """Decides, which slot to access using the passed decider method and the passed
         reference slots.
@@ -1322,7 +1320,7 @@ class SlotDecider(SlotView):
             method (SlotDeciderMethods): The method to use for decision making.
 
         Returns:
-            tuple[SlotKey, OptionSlot | SectionStructure]: Tuple of the target's
+            tuple[SlotKey, OptionValue | SectionStructure]: Tuple of the target's
                 decided slot's key and value.
 
         """

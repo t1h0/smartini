@@ -2,7 +2,7 @@ from typing import overload, Literal, Self
 import re
 from pathlib import Path
 from src.slots import SlotAccess, SlotKey, SlotDeciderMethods
-from src.entities import Option, UndefinedOption, Comment
+from src.entities import Option, OptionValue, UndefinedOption, Comment, SectionName
 from src.args import Parameters
 from nomopytools.collections_extensions import OrderedDict
 
@@ -27,7 +27,7 @@ class Section:
     def _add_entity(
         cls,
         entity: UndefinedOption | Option,
-        positions: int | list[int] = -1,
+        positions: int | list[int] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> UndefinedOption: ...
@@ -36,7 +36,7 @@ class Section:
     def _add_entity(
         cls,
         entity: Comment,
-        positions: int | list[int] = -1,
+        positions: int | list[int] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> Comment: ...
@@ -45,7 +45,7 @@ class Section:
     def add_entity(
         cls,
         entity: UndefinedOption | Option,
-        positions: int | list[int] = -1,
+        positions: int | list[int] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> UndefinedOption: ...
@@ -54,7 +54,7 @@ class Section:
     def add_entity(
         cls,
         entity: Comment,
-        positions: int | list[int] = -1,
+        positions: int | list[int] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> Comment:
@@ -64,7 +64,8 @@ class Section:
             entity (UndefinedOption | Option | Comment): The entity to add.
             positions (int | list[int | None], optional): Where to put the entity in
                 the section's structure. Either one position for all slots or a list
-                with one position per slot. Defaults to -1 (append to end in every slot).
+                with one position per slot. If None, will append to the end in every slot.
+                Defaults to None.
             slots (SlotAccess, optional): Slot(s) to add the entity to.
                 Must match positions. Defaults to None.
 
@@ -88,81 +89,120 @@ class Section:
 
         Args:
             name (str | None, optional): Name of the option variable. Defaults to None.
-            key (SlotKey | None, optional): The option key. Defaults to None.
+            key (SlotKey | None, optional): The option key. Will be ignored if name is
+                not None. Defaults to None.
+
         Returns:
             Option: The requested option.
         """
 
     @overload
     @classmethod
+    def _get_options(
+        cls,
+        include_undefined: Literal[False] = ...,
+        *,
+        slots: int | str | list[int | str] = ...,
+    ) -> OrderedDict[str, Option]: ...
+    @overload
+    @classmethod
+    def _get_options(
+        cls,
+        include_undefined: bool | Literal["only"] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Option]: ...
+    @overload
+    @classmethod
+    def get_options(
+        cls,
+        include_undefined: Literal[False] = ...,
+        *,
+        slots: int | str | list[int | str] = ...,
+    ) -> OrderedDict[str, Option]: ...
+    @overload
+    @classmethod
+    def get_options(
+        cls,
+        include_undefined: bool | Literal["only"] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Option]:
+        """Get options of the section.
+
+        Args:
+            include_undefined (bool | "only", optional): Whether to include undefined
+                options. If "only", will return only undefined options. Always False
+                if slots is not None.
+            slots (SlotAccess, optional): Which slot(s) to get options from. If multiple
+                are given, will return the intersection. If None will return all.
+                Defaults to None.
+
+        Returns:
+            OrderedDict[str, Option]: Variable names as keys and Options as values. Order
+                is that of the slot structure if len(slots) == 1. Otherwise, order matches
+                original schema structure with undefined options at the end.
+        """
+
+    @overload
+    @classmethod
     def _set_option(
         cls,
         name: str,
+        value: OptionValue,
         positions: int | list[int | None] | None = None,
         key: ... = ...,
         *,
         slots: SlotAccess = None,
-        **kwargs,
     ) -> None: ...
     @overload
     @classmethod
     def _set_option(
         cls,
         name: None,
+        value: OptionValue,
         positions: int | list[int | None] | None = None,
         key: str = ...,
         *,
         slots: SlotAccess = None,
-        **kwargs,
     ) -> None: ...
     @overload
     @classmethod
     def set_option(
         cls,
         name: str,
+        value: OptionValue,
         positions: int | list[int | None] | None = None,
         key: ... = ...,
         *,
         slots: SlotAccess = None,
-        **kwargs,
     ) -> None: ...
     @overload
     @classmethod
     def set_option(
         cls,
         name: None,
+        value: OptionValue,
         positions: int | list[int | None] | None = None,
         key: str = ...,
         *,
         slots: SlotAccess = None,
-        **kwargs,
     ) -> None:
         """Set an option's value by accessing it via variable name or option key.
 
         Args:
             name (str | None): The variable name of the option. Must be None if key
                 should be used.
-            positions (int | list[int | None] | None): Position in slots the option
+            value (OptionValue): The new value for the option.
+            positions (int | list[int | None] | None): Position in slots the entity
                 should take. Either int for same position in all slots or one position
-                per slot. If None and for every slot that None is specified as the
-                position, will take previous position of the Option in the respective
-                slot and will append to slots where Option didn't exist before.
+                per slot. If None and for every slot that None is specified for,
+                will take previous position of the Option in the respective slot and
+                will append to slots where Option didn't exist before.
                 Defaults to None.
-            key (str | None, optional): The option key. Defaults to None.
+            key (str | None, optional): The option key. Will be ignored if name
+                is not None. Defaults to None.
             slots (SlotAccess, optional): The slot to use. Defaults to None (all slots).
-            **kwargs: Keyword-arguments corresponding to OptionSlot attributes.
-        """
-
-    @classmethod
-    def _get_options(
-        cls, include_undefined: bool = True, *, slots: SlotAccess = None
-    ) -> OrderedDict[str, Option]: ...
-    @classmethod
-    def get_options(cls) -> dict[str, Option]:
-        """Get all options of the section.
-
-        Returns:
-            dict[str, Option]: Variable names as keys and Options as values.
         """
 
     @classmethod
@@ -220,10 +260,34 @@ class Schema:
     def _with_slot(cls, slot: SlotAccess) -> Self: ...
     @classmethod
     def with_slot(cls, slot: SlotAccess) -> Self:
-        """Access the ini using a specific slot.
+        """Access the ini using a specific slot. Equivalent to item access via brackets
+        (i.e. Schema[slot]).
 
         Args:
             slot (SlotAccess): The slot to use.
+        """
+
+    @classmethod
+    def _get_section(
+        cls, section_name: SectionName | str | None, filled_only: bool = True
+    ) -> tuple[str, Section | SectionMeta]: ...
+    @classmethod
+    def get_section(
+        cls, section_name: SectionName | str | None, filled_only: bool = True
+    ) -> tuple[str, Section | SectionMeta]:
+        """Get a section by its name.
+
+        Args:
+            section_name (SectionName | str | None): The name of the section to get.
+            filled_only (bool, optional): Whether to only look for sections that have been
+                already read from a file (:= filled with content) into any slot.
+                Defaults to True.
+
+        Raises:
+            EntityNotFound: If the section was not found by its name.
+
+        Returns:
+            tuple[str, Section | SectionMeta]: Tuple of variable name and section object.
         """
 
     @overload
@@ -242,7 +306,7 @@ class Schema:
         filled_only: Literal[False] = ...,
         include_undefined: bool = True,
         *,
-        slots: SlotAccess = None,
+        slots: None = None,
     ) -> OrderedDict[str, Section | SectionMeta]: ...
     @overload
     @classmethod
@@ -260,23 +324,25 @@ class Schema:
         filled_only: Literal[False] = ...,
         include_undefined: bool = True,
         *,
-        slots: SlotAccess = None,
+        slots: None = None,
     ) -> OrderedDict[str, Section | SectionMeta]:
-        """Get all sections of the ini.
+        """Get configuration section(s).
 
         Args:
-            filled_only (bool, optional): Whether to only return sections that have
-                been filled with content already. Defaults to True.
-            include_undefined (bool, optional): Whether to also include undefined options.
+            filled_only (bool, optional): Whether to only return sections that have been
+                already read from a file (:= filled with content) into any slot.
                 Defaults to True.
-            slots (SlotAccess, optional): Options of which slot(s) to get. If multiple
-                are given, will return the intersection. If None will return all.
-                Defaults to None.
+            include_undefined (bool, optional): Whether to also include undefined
+                sections. Defaults to True.
+            slots (SlotAccess, optional): Which slot(s) to get the sections from. If
+                multiple are given, will return the intersection. If None, will return
+                all. Defaults to None.
 
         Returns:
-            OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]:
-                OrderedDict with access (variable) names as keys and the Sections
-                as values.
+            OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]: Variable
+                names as keys and the Sections as values.  Order is that of the slot
+                structure if len(slots) == 1. Otherwise, order matches defined schema
+                structure with undefined sections at the end.
         """
 
     @classmethod

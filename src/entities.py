@@ -3,7 +3,7 @@
 from typing import overload, Any, Self, TypeVar
 import re
 from src.exceptions import ExtractionError
-from src.slots import SlotKey, SlotAccess, SlotEntity
+from src.slots import SlotAccess, SlotEntity
 
 T = TypeVar("T")
 
@@ -83,17 +83,18 @@ class Comment:
         return f"{prefix} {self.content}" if prefix is not None else self.content
 
 
-type OptionSlot = Any
+type OptionValue = Any
+type OptionKey = str
 
 
-class Option(SlotEntity[OptionSlot]):
+class Option(SlotEntity[OptionValue]):
     """An ini option."""
 
     type OptionDelimiter = str | re.Pattern | tuple[str | re.Pattern, ...] | None
 
     def __init__(
         self,
-        key: SlotKey,
+        key: OptionKey,
         values: Any | list[Any] | None = None,
         slots: SlotAccess = None,
     ) -> None:

@@ -128,7 +128,6 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
                     raise IndexError(
                         f"Slot '{slot}' can't be set because it doesn't exist."
                     )
-                # warnings.warn(warn.slot_manipulation)
                 self.add(slot)
             if new_slot_value is None:
                 slot_object = self[slot]
@@ -378,11 +377,13 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
     def __init__(self) -> None:
         super().__init__(Structure)
 
-    def _insert_structure_items(
+    def _set_structure_items(
         self,
         items: StructureItem | list[StructureItem],
-        positions: int | list[int] | None = None,
-        exist_ok: bool = False,
+        positions: int | list[int | None] | None = None,
+        exist_action: Literal[
+            "exception", "ignore", "move", "move_not_None"
+        ] = "exception",
         *,
         slots: SlotAccess = None,
     ) -> None:
@@ -390,34 +391,60 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
 
         Args:
             items (StructureItem | list[StructureItem]): The item(s) to insert.
-            positions (int | list[int | None], optional): Where to put the item(s) in
-                the structure. Either one position for all slots or a list
-                with one position per slot. If None, will append to the end in every slot.
-                Defaults to None.
-            exist_ok (bool, optional): Whether to not throw an error if the item already
-                exists in the structure. If True, will simply not insert the item.
-                Defaults to False.
+            positions (int | list[int | None] | None): Position in structure the item(s)
+                should take. Either int for same position in all slots or one position
+                per slot. If None and for every slot that None is specified as the
+                position, will take previous position of the Option in the respective
+                slot and will append to slots where Option didn't exist before. Defaults to None.
+            exist_action ("exception" | "ignore" | "move" | "move_not_None", optional):
+                What to do, when an item already exists in the structure. "exception"
+                will raise an DuplicateEntityError, "ignore" will simply ignore the item,
+                "move" will move the item to the specified position and "move_not_None"
+                will only move an item, if the position for that slot is not None.
+                Defaults to "exception".
             slots (SlotAccess, optional): Slot(s) to add the entity to.
                 Must match positions. Defaults to None.
         """
         slots = self._slots.slot_access(slots, verify=True)
-        if positions is not None:
-            positions = self._validate_position(positions, slots)
-        else:
-            positions = [None]
+        validated_positions = self._validate_position(positions, slots)
+
+        # define handling of duplicates
+        handle_dupl = (
+            (lambda pos: "ignore" if pos is None else "move")
+            if exist_action == "move_not_None"
+            else (lambda _: exist_action)
+        )
+
         if not isinstance(items, list):
             items = [items]
-        for s, pos in zip(slots, positions):
-            if (dupl := set(items).intersection(self._slots[s])) and not exist_ok:
-                raise DuplicateEntityError(f"Items {dupl} already exist.")
-            if positions is None:
-                self._slots[s].extend(
-                    item for item in items if item not in self._slots[s]
-                )
+
+        for s, pos in zip(slots, validated_positions):
+            # define slice for inserting
+            pos_slice = (
+                slice(len(self._slots[s]), len(self._slots[s]))
+                if pos is None
+                else slice(pos, pos)
+            )
+
+            items_set = set(items)
+
+            # check for duplicates
+            if dupl := items_set.intersection(self._slots[s]):
+                match handle_dupl(pos):
+                    case "ignore":
+                        self._slots[s][pos_slice] = items_set.difference(dupl)
+                    case "move":
+                        new_slot = []
+                        for i, v in enumerate(self._slots[s]):
+                            if i == pos_slice.start:
+                                new_slot.extend(items)
+                            if v not in dupl:
+                                new_slot.append(v)
+                    case _:  # includes "exception"
+                        raise DuplicateEntityError(f"Items {dupl} already exist.")
             else:
-                self._slots[s][pos:pos] = (
-                    item for item in items if item not in self._slots[s]
-                )
+                # no duplicates
+                self._slots[s][pos_slice] = items
 
     def _set_structure(
         self,
@@ -452,13 +479,13 @@ class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
 
     def _validate_position(
         self,
-        position: int | None | list[int] | list[None] | list[int | None],
+        position: int | list[int] | None | list[None] | list[int | None],
         slots: list[SlotKey],
     ) -> list[int] | list[None] | list[int | None]:
         """Validate, that the requested position(s) can be accessed for the requested slot(s).
 
         Args:
-            position (int | None | list[int] | list[None] | list[int  |  None]):
+            position (int | list[int] | None | list[None] | list[int | None]):
                 The position(s) to access.
             slots (list[SlotKey]): The requested slots.
 
