@@ -5,7 +5,7 @@ class IniStructureError(Exception):
     """Raised when the ini violates the defined structure."""
 
 
-class ContinuationError(IniStructureError):
+class MultilineError(IniStructureError):
     """Raised when a continuation violates continuation rules."""
 
 

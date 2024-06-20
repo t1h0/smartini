@@ -9,9 +9,9 @@ class Parameters:
         entity_delimiter: str | re.Pattern = re.compile("\n"),
         comment_prefixes: str | re.Pattern | tuple[str | re.Pattern, ...] = ";",
         option_delimiters: str | re.Pattern | tuple[str | re.Pattern, ...] = "=",
-        continuation_allowed: bool = True,
-        continuation_prefix: str | re.Pattern | None = re.compile("\t"),
-        continuation_ignore: (
+        multiline_allowed: bool = True,
+        multiline_prefix: str | re.Pattern | None = None,
+        multiline_ignore: (
             tuple[
                 Literal["section_name", "option_delimiter", "comment_prefix"],
                 ...,
@@ -30,18 +30,24 @@ class Parameters:
                 Prefix characters that denote a comment. If multiple are given,
                 the first will be taken for writing. Defaults to ";".
             option_delimiters (str | re.Pattern | tuple[str | re.Pattern, ...], optional):
-                Delimiter characters that delimit keys from values. If multiple are
-                given, the first will be taken for writing. Defaults to "=".
-            continuation_allowed (bool, optional): Whether continuation of options
-                (i.e. multiline options) are allowed. Defaults to True.
-            continuation_prefix (str | re.Pattern | None, optional): Prefix to denote
-                options' value continuations. Defaults to re.Pattern("\t") (TAB character).
-            continuation_ignore (tuple["section_name" | "option_delimiter" |
-                "comment_prefix", ...] | None, optional): Entitiy identifier to ignore
-                while continuing an option's value. Otherwise those identifiers will be
-                interpreted as a new entity instead of a continuation (despite possibly
-                satisfying continuation rules). Defaults to None (:= interpret
-                all detected entities as new entities).
+                Delimiter characters that delimit option keys from values. If multiple
+                are given, the first will be taken for writing. Defaults to "=".
+            multiline_allowed (bool, optional): Whether continuations of options
+                (i.e. multiline options) are allowed. If False, will throw a
+                ContinuationError for any continuation. Defaults to True.
+            multiline_prefix (str | re.Pattern | None, optional): Prefix to denote
+                continuations of multiline options. If set, will only accept
+                continuations with that prefix (will throw a ContinuationError if that
+                prefix is missing). Defaults to None (possible continuation after one
+                entity delimiter).
+            multiline_ignore (tuple["section_name" | "option_delimiter" |
+                "comment_prefix", ...] | None, optional): Entitity identifier(s) to ignore
+                while continuing an option's value. Otherwise lines with those identifiers
+                will be interpreted as a new entity instead of a continuation (despite
+                possibly satisfying multiline rules). Useful if a continuation is
+                possibly in brackets (otherwise interpreted as a section name), contains
+                the option delimiter (e.g. URLs often include a "=") or starts with a
+                comment prefix. Defaults to None.
             ignore_whitespace_lines (bool, optional): Whether to interpret lines with
                 only whitespace characters (space or tab) as empty lines.
                 Defaults to True.
@@ -57,9 +63,9 @@ class Parameters:
         self.entity_delimiter = entity_delimiter
         self.comment_prefixes = comment_prefixes
         self.option_delimiters = option_delimiters
-        self.continuation_allowed = continuation_allowed
-        self.continuation_prefix = continuation_prefix
-        self.continuation_ignore = continuation_ignore
+        self.multiline_allowed = multiline_allowed
+        self.multiline_prefix = multiline_prefix
+        self.multiline_ignore = multiline_ignore
         self.ignore_whitespace_lines = ignore_whitespace_lines
         self.read_undefined = read_undefined
 
@@ -97,17 +103,17 @@ class Parameters:
             self.option_delimiters = (self.option_delimiters,)
 
         if not params or "continuation_prefix" in params:
-            self.continuation_prefix = (
+            self.multiline_prefix = (
                 ""
-                if self.continuation_prefix is None
+                if self.multiline_prefix is None
                 else (
-                    self.continuation_prefix.pattern
-                    if isinstance(self.continuation_prefix, re.Pattern)
-                    else re.escape(self.continuation_prefix)
+                    self.multiline_prefix.pattern
+                    if isinstance(self.multiline_prefix, re.Pattern)
+                    else re.escape(self.multiline_prefix)
                 )
             )
 
         if (
             not params or "continuation_ignore" in params
-        ) and self.continuation_ignore is None:
-            self.continuation_ignore = ()
+        ) and self.multiline_ignore is None:
+            self.multiline_ignore = ()

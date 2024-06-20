@@ -10,7 +10,7 @@ import inspect
 import contextlib
 from charset_normalizer import from_bytes as read_from_bytes
 from src.exceptions import (
-    ContinuationError,
+    MultilineError,
     IniStructureError,
     ExtractionError,
     EntityNotFound,
@@ -714,7 +714,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             # try to extract section
             if (
                 not possible_continuation
-                or "section" not in parameters.continuation_ignore
+                or "section_name" not in parameters.multiline_ignore
             ):
                 if extracted_section_name := self._extract_section_name(entity_content):
                     if current_section and current_section_structure:
@@ -737,7 +737,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             # try to extract option
             if (
                 not possible_continuation
-                or "option" not in parameters.continuation_ignore
+                or "option_delimiter" not in parameters.multiline_ignore
             ):
                 if option := self._extract_option(
                     entity_content, parameters, slots=slots
@@ -752,7 +752,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             # try to extract comment
             if (
                 not possible_continuation
-                or "comment" not in parameters.continuation_ignore
+                or "comment_prefix" not in parameters.multiline_ignore
             ):
                 if comment := self._extract_comment(entity_content, parameters):
                     comment = self._handle_comment(
@@ -767,13 +767,13 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 raise IniStructureError(
                     f"line {entity_index} could not be assigned to a key."
                 )
-            if not parameters.continuation_allowed:
-                raise ContinuationError(
-                    f"line {entity_index} is continuation but continuation is not allowed."
+            if not parameters.multiline_allowed:
+                raise MultilineError(
+                    f"line {entity_index} is multiline but multiline is not allowed."
                 )
             if not possible_continuation:
-                raise ContinuationError(
-                    f"line {entity_index} doesn't follow continuation rules."
+                raise MultilineError(
+                    f"line {entity_index} doesn't follow multiline rules."
                 )
             self._handle_continuation(entity_content, current_option, slots=slots)
 
@@ -1102,8 +1102,8 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
     def _check_for_possible_continuation(
         self, line: str, current_option: Option | None, parameters: Parameters
     ) -> tuple[str, bool]:
-        """Check if line is a possible continuation and remove the continuation prefix
-        from the line.
+        """Check if line is a possible continuation of a multiline and remove the
+        multiline prefix from the line.
 
         Args:
             line (str): The line to check.
@@ -1111,12 +1111,12 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
-            tuple[str, bool]: The line with the continuation prefix removed (if
+            tuple[str, bool]: The line with the multiline prefix removed (if
                 possible continuation) and a boolean indicating if the line is a possible
                 continuation.
         """
         continuation = None
-        if parameters.continuation_allowed and current_option:
+        if parameters.multiline_allowed and current_option:
             # if no last option it can't be a continuation
             continuation = self._extract_continuation(line, parameters)
         is_continuation = continuation is not None
@@ -1132,7 +1132,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         Returns:
             str: The continuation or None if continuation was not found.
         """
-        continuation = re.search(rf"(?<=^{parameters.continuation_prefix}).*", line)
+        continuation = re.search(rf"(?<=^{parameters.multiline_prefix}).*", line)
         return None if continuation is None else continuation[0]
 
     def _handle_continuation(
