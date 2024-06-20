@@ -1,6 +1,14 @@
 """Classes related to slot mechanism"""
 
-from typing import Literal, TypeVar, overload, Callable, Generator, Any, Sequence
+from typing import (
+    Literal,
+    TypeVar,
+    overload,
+    Callable,
+    Generator,
+    Any,
+    Sequence,
+)
 from nomopytools.collections_extensions import OrderedDict
 from src.exceptions import (
     SlotNotFound,
@@ -27,8 +35,8 @@ SlotDeciderMethods = Literal[
 SlotKey = int | str
 SlotValue = TypeVar("SlotValue")
 SlotAccess = int | str | list[int | str] | None
-"""Which slot to access. Int or str identifier for a single slot, list[int|str] for
-multiple slots and None for all slots.
+"""Identifier for which slot(s) to access. int or str identifier for a single slot,
+list[int | str] for multiple slots and None for all slots.
 """
 
 

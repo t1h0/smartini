@@ -7,16 +7,16 @@ from src.args import Parameters
 from nomopytools.collections_extensions import OrderedDict
 
 class SectionMeta(type):
-    """Metaclass for ini configuration file sections. Section names must be specified
-    via '_name' class variable.
-    """
+    """Metaclass for ini configuration file sections."""
 
     # name of the section. must be provided!
     _name: str | None
 
 class Section:
-    """An ini configuration file section. Name of the section must be defined via
-    'name' class attribute.
+    """A configuration section. Holds options and comments. If the actual section name
+    differs from class variable, it needs to be assigned to the "_name" class attribute!
+    Furthermore, class attributes holding options must not start with
+    a leading underscore!
     """
 
     # name of the section. must be provided!
@@ -202,7 +202,7 @@ class Section:
                 Defaults to None.
             key (str | None, optional): The option key. Will be ignored if name
                 is not None. Defaults to None.
-            slots (SlotAccess, optional): The slot to use. Defaults to None (all slots).
+            slots (SlotAccess, optional): The slot(s) to use. Defaults to None (all slots).
         """
 
     @classmethod
@@ -238,13 +238,14 @@ class Schema:
         method: SlotDeciderMethods = "fallback",
         **kwargs,
     ) -> None:
-        """Schema class. Parameters will be stored as default read and write parameters.
+        """Schema class to define configuration schema and access loaded configurations.
+        Parameters will be stored as default read and write parameters.
 
         Args:
             parameters (Parameters | None, optional): Default parameters for reading and
-                writing inis, as an Parameters object. Parameters can also be passed
+                writing inis, as a Parameters object. Parameters can also be passed
                 as kwargs. Missing parameters (because parameters is None and no or not
-                enough kwargs are passed) will be taken from default Parameters
+                enough kwargs are passed) will be taken from default parameters
                 (see doc of Parameters). Defaults to None.
             method (SlotDeciderMethods, optional): Method for choosing the slot.
                 Defaults to "fallback".
@@ -369,9 +370,9 @@ class Schema:
         Args:
             path (str | Path): Path to the ini file.
             parameters (Parameters | None, optional): Parameters for reading and
-                writing inis, as an Parameters object. Parameters can also be passed
+                writing inis, as a Parameters object. Parameters can also be passed
                 as kwargs. Missing parameters (because parameters is None and no or not
-                enough kwargs are passed) will be taken from default Parameters that
+                enough kwargs are passed) will be taken from default parameters that
                 were defined on initialization. Defaults to None.
             parameters_as_default (bool, optional): Whether to save the parameters for
                 this read as default parameters. Defaults to False.

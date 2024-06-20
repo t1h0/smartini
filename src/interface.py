@@ -41,17 +41,14 @@ from src.globals import (
     INTERNAL_PREFIX_IN_WORDS,
 )
 from src.utils import _str_to_var
-from src import warn
 from nomopytools.collections_extensions import OrderedDict
 from nomopytools.func import copy_doc
 
 
 class SectionMeta(type):
-    """Metaclass for ini configuration file sections. Section names must be specified
-    via '_name' class variable.
-    """
+    """Metaclass for ini configuration file sections."""
 
-    # name of the section. defaults to class name.
+    # name of the section if actual section name differs from class variable
     _name: str | None
 
     def __new__(cls, __name: str, __bases: tuple, __dict: dict):
@@ -68,14 +65,17 @@ class SectionMeta(type):
 
 
 class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
+    """A configuration section. Holds options and comments. If the actual section name
+    differs from class variable, it needs to be assigned to the "_name" class attribute!
+    Furthermore, class attributes holding options must not start with
+    a leading underscore!
+    """
 
-    # name of the section. defaults to class name.
+    # name of the section if actual section name differs from class variable
     _name: str | None
 
     def __init__(self) -> None:
-        """An ini configuration file section. Name of the section must be defined via
-        'name' class attribute.
-        """
+
         super().__init__()
 
         # schema_structure contains the initial structure as saved in the schema
@@ -460,14 +460,15 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         method: SlotDeciderMethods = "fallback",
         **kwargs,
     ) -> None:
-        """Schema class. Parameters will be stored as default read and write parameters.
+        """Schema class to define configuration schema and access loaded configurations.
+        Parameters will be stored as default read and write parameters.
 
         Args:
             parameters (Parameters | None, optional): Default parameters for reading and
-                writing inis, as an Parameters object. Parameters can also be passed
-                as kwargs. Missing parameters (no or not enough kwargs are passed)
-                will be taken from default Parameters (see doc of Parameters).
-                Defaults to None.
+                writing inis, as a Parameters object. Parameters can also be passed
+                as kwargs. Missing parameters (because parameters is None and no or not
+                enough kwargs are passed) will be taken from default parameters
+                (see doc of Parameters). Defaults to None.
             method (SlotDeciderMethods, optional): Method for choosing the slot.
                 Defaults to "fallback".
             **kwargs (optional): Parameters as kwargs. See Parameters doc for details.
@@ -645,9 +646,9 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         Args:
             path (str | Path): Path to the ini file.
             parameters (Parameters | None, optional): Parameters for reading and
-                writing inis, as an Parameters object. Parameters can also be passed
+                writing inis, as a Parameters object. Parameters can also be passed
                 as kwargs. Missing parameters (because parameters is None and no or not
-                enough kwargs are passed) will be taken from default Parameters that
+                enough kwargs are passed) will be taken from default parameters that
                 were defined on initialization. Defaults to None.
             parameters_as_default (bool, optional): Whether to save the parameters for
                 this read as default parameters. Defaults to False.

@@ -1,0 +1,1 @@
+You want to contribute? Great, I'm always happy for any support on this project! Simply send a pull request. By contributing to this project, you agree that your contributions will be licensed under the project's license.

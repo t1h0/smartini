@@ -21,10 +21,10 @@ class Parameters:
         ignore_whitespace_lines: bool = True,
         read_undefined: bool | Literal["section", "option"] = False,
     ) -> None:
-        """Ini parameters for reading and writing.
+        """Parameters for reading and writing.
 
         Args:
-            entity_delimiter (str | re.Pattern, optional): Delimiter that delimits ini
+            entity_delimiter (str | re.Pattern, optional): Delimiter that delimits
                 entities (section name, option, comment). Defaults to re.Pattern("\n").
             comment_prefixes (str | re.Pattern | tuple[str | re.Pattern, ...], optional):
                 Prefix characters that denote a comment. If multiple are given,
@@ -52,10 +52,10 @@ class Parameters:
                 only whitespace characters (space or tab) as empty lines.
                 Defaults to True.
             read_undefined (bool | "section" | "option", optional):
-                Whether undefined content should be read and stored. If true, will read
-                every undefined content. If type[Section], will read undefined sections
+                Whether undefined content should be read and stored. If True, will read
+                every undefined content. If "section", will read undefined sections
                 and their content but not undefined options within defined sections.
-                type[Option] will read undefinied options within defined sections but
+                "option" will read undefinied options within defined sections but
                 not undefined sections and their content. If False, will ignore
                 undefined content. Defaults to False.
         """
