@@ -1,0 +1,2 @@
+# Python dependencies required for development
+charset-normalizer>=3.3.2
