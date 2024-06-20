@@ -11,11 +11,15 @@ from src.exceptions import (
 
 T = TypeVar("T")
 
-SlotDeciderMethods = Literal["default", "first", "cascade up", "latest", "cascade down"]
+SlotDeciderMethods = Literal[
+    "fallback", "first", "cascade up", "latest", "cascade down"
+]
 """Method to decide which slot to use.
-    "default": Uses first slot whenever latest slot is None, otherwise latest slot.
+    "fallback": Uses first slot whenever latest slot is None, otherwise latest slot.
+        This is especially useful if the first slot provides default fallback values
+        for your configuration.
     "first": Uses first slot.
-    "cascape up": Uses the first slot that is not None from first to latest.
+    "cascade up": Uses the first slot that is not None from first to latest.
     "latest": Uses latest slot.
     "cascade down": Uses first slot that is not None from latest to first.    
 """

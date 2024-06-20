@@ -235,7 +235,7 @@ class Schema:
     def __init__(
         self,
         parameters: Parameters | None = None,
-        method: SlotDeciderMethods = "default",
+        method: SlotDeciderMethods = "fallback",
         **kwargs,
     ) -> None:
         """Schema class. Parameters will be stored as default read and write parameters.
@@ -246,10 +246,8 @@ class Schema:
                 as kwargs. Missing parameters (because parameters is None and no or not
                 enough kwargs are passed) will be taken from default Parameters
                 (see doc of Parameters). Defaults to None.
-            method ("default" | "first" | "latest", optional): Method for choosing
-                the slot. "default" will use slot 0 whenenver latest slot is None,
-                "first" will use first slot, "latest" the last slot that was added.
-                Defaults to "default".
+            method (SlotDeciderMethods, optional): Method for choosing the slot.
+                Defaults to "fallback".
             **kwargs (optional): Parameters as kwargs. See Parameters doc for details.
         """
 

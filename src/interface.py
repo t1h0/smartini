@@ -457,7 +457,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
     def __init__(
         self,
         parameters: Parameters | None = None,
-        method: SlotDeciderMethods = "default",
+        method: SlotDeciderMethods = "fallback",
         **kwargs,
     ) -> None:
         """Schema class. Parameters will be stored as default read and write parameters.
@@ -468,10 +468,8 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 as kwargs. Missing parameters (no or not enough kwargs are passed)
                 will be taken from default Parameters (see doc of Parameters).
                 Defaults to None.
-            method ("default" | "first" | "cascade up" | "latest", optional): Method for choosing
-                the slot. "default" will use slot 0 whenenver latest slot is None,
-                "first" will use first slot, "latest" the last slot that was added.
-                Defaults to "default".
+            method (SlotDeciderMethods, optional): Method for choosing the slot.
+                Defaults to "fallback".
             **kwargs (optional): Parameters as kwargs. See Parameters doc for details.
         """
         super().__init__()
@@ -826,7 +824,7 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
         access = self._slots.slot_access(content_slots, verify=True)
         if content_slots is None:
             match (decider_method or self._decider_method):
-                case "default":
+                case "fallback":
                     access = [access[-1]] + ([access[0]] if len(access) > 1 else [])
                 case "first":
                     access = [access[0]]
@@ -1328,7 +1326,7 @@ class SlotDecider(SlotView):
         first_key = reference_slots.iloc[0][0]
 
         match method:
-            case "default":
+            case "fallback":
                 latest_val = target._get_slots(latest_key)
                 return (
                     (latest_key, latest_val)
