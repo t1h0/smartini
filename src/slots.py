@@ -333,9 +333,7 @@ class SlotEntity[SlotValue]:
         slots = self._slots.slot_access(slot_access=slots, verify=True)
         match _id:
             case "key":
-                gen = (
-                    func(key, slot) for key, slot in self._slots.items() if key in slots
-                )
+                gen = (func(key, self._slots[key]) for key in slots)
             case "index":
                 gen = (
                     func(index, slot)
@@ -349,10 +347,10 @@ class SlotEntity[SlotValue]:
                     if key in slots
                 )
             case _:
-                gen = (func(slot) for slot in self[slots])
+                gen = (func(slot) for slot in self._slots[slots])
         if not inplace:
             return gen
-        for key, val in zip(self._slots, gen):
+        for key, val in zip(slots, gen):
             self._slots[key] = val
 
 
