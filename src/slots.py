@@ -19,7 +19,7 @@ from src.exceptions import (
 
 T = TypeVar("T")
 
-SlotDeciderMethods = Literal[
+type SlotDeciderMethods = Literal[
     "fallback", "first", "cascade up", "latest", "cascade down"
 ]
 """Method to decide which slot to use.
@@ -32,9 +32,9 @@ SlotDeciderMethods = Literal[
     "cascade down": Uses first slot that is not None from latest to first.    
 """
 
-SlotKey = int | str
 SlotValue = TypeVar("SlotValue")
-SlotAccess = int | str | list[int | str] | None
+type SlotKey = int | str
+type SlotAccess = int | str | list[int | str] | None
 """Identifier for which slot(s) to access. int or str identifier for a single slot,
 list[int | str] for multiple slots and None for all slots.
 """
