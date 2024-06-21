@@ -1,5 +1,7 @@
 # **SmartIni** #
 
+[![Python versions](https://img.shields.io/pypi/pyversions/smartini.svg)](https://pypi.org/project/smartini/) [![PyPI version](https://img.shields.io/pypi/v/smartini.svg)](https://pypi.org/project/smartini/) [![License](https://img.shields.io/github/license/t1h0/smartini)](https://raw.githubusercontent.com/t1h0/smartini/master/LICENSE)
+
 SmartIni is a simple, yet fully-featured python library to work with INI configuration files. It aims at providing easy access to configurations saved in the INI file structure while eliminating the drawbacks of existing approaches like configparser.
 
 ### Contents
@@ -62,7 +64,7 @@ Say you want to distribute a news service that crawls a specific news website pe
 interval = 30
 
 ; news website to crawl from
-news-source = my-favourite-news-source.com
+news-source = my-favorite-news-source.com
 
 [Mailer]
 ; Settings for the mailer
@@ -73,7 +75,7 @@ news-receiver = emma@geller-greene.com
 
 Let's break this down. INI files consist of three possible *entities*:
 - **Section Name**: In \[brackets\]. Denotes the beginning of a new section (and ending of the one before). E.g. `[News Crawler]`.
-- **Comment**: Preceeded by a prefix (usually `;`or `#`). Adds explanation to the other entities. E.g. `; Settings for the news crawler`.
+- **Comment**: Preceded by a prefix (usually `;`or `#`). Adds explanation to the other entities. E.g. `; Settings for the news crawler`.
 - **Option**: Consists of a *key*, a *delimiter* (usually `=` or `:`) and a *value*. Holds an actual setting. E.g. `interval = 30`.
 
 ## Setting up the configuration Schema
@@ -98,7 +100,7 @@ Let's break this down:
 - Your *schema class* needs to inherit from [`smartini.Schema`](#smartinischema).
 - Each section gets its own *section class* within this schema class, inheriting from [`smartini.Section`](#smartinisection).
 - **`Important!`** If the actual section name differs from the section class name, it's assigned to the `_name` class attribute.
-- Each option of a section gets its key assigned to an arbitrary string attribute. The varibable name **must not start with a leading underscore**.
+- Each option of a section gets its key assigned to an arbitrary string attribute. The variable name **must not start with a leading underscore**.
 
 ## Using the configurations in your code
 
@@ -203,7 +205,7 @@ So how does this help us with our initial problem? Easy!
     >>> config.read_ini("config.ini", slots="default")
     >>> config.read_ini("user.ini", slots="dad")
     ```
-2. Access the interval option like before. By default, the `"fallback"` [SlotDeciderMethod](#smartinislotdecidermethods) is used, so smartini will automatically use the first slot for the interval option since the lastest is None. However, `"cascade down"` would also deliver the desired result here.
+2. Access the interval option like before. By default, the `"fallback"` [SlotDeciderMethod](#smartinislotdecidermethods) is used, so smartini will automatically use the first slot for the interval option since the latest is `None`. However, `"cascade down"` would also deliver the desired result here.
 
     ```python
     >>> config.Crawler.interval
@@ -230,7 +232,7 @@ SmartIni allows for customization of the following markers by passing the respec
 
 - **Entity delimiter**, `entity_delimiter`, default: `"\n"` (newline)
 
-    Seperates entities from each other, e.g. `opt=val`**`\n`**`; comment`
+    Separates entities from each other, e.g. `opt=val`**`\n`**`; comment`
 - **Option delimiter**, `option_delimiters`, default: `"="`
 
     Separates option key from value, e.g. `opt`**`=`**`val`. You can pass multiple if the ini file is inconsistent.
@@ -242,7 +244,7 @@ SmartIni allows for customization of the following markers by passing the respec
 
 ## Multiline options
 
-SmartIni by default allows for multiline option values, so for the whole value to span over multiple lines. Every line after the first line is called a *continuation*. You can control this behaviour by specifying the three multiline parameters during [Schema initialization](#smartinischema).
+SmartIni by default allows for multiline option values, so for the whole value to span over multiple lines. Every line after the first line is called a *continuation*. You can control this behavior by specifying the three multiline parameters during [Schema initialization](#smartinischema).
 
 > For further information see [Parameters](#smartiniparameters).
 
@@ -287,7 +289,7 @@ Parameters for reading and writing.
 - **multiline_ignore** (`tuple["section_name" | "option_delimiter" |
         "comment_prefix", ...] | None`, optional)
         
-    Entitity identifier(s) to ignore while continuing an option's value. Otherwise lines with those identifiers will be interpreted as a new entity instead of a continuation (despite possibly satisfying multiline rules). Useful if a continuation is possibly in brackets (otherwise interpreted as a section name), contains the option delimiter (e.g. URLs often include a `"="`) or starts with a comment prefix. Defaults to `None`.
+    Entity identifier(s) to ignore while continuing an option's value. Otherwise lines with those identifiers will be interpreted as a new entity instead of a continuation (despite possibly satisfying multiline rules). Useful if a continuation is possibly in brackets (otherwise interpreted as a section name), contains the option delimiter (e.g. URLs often include a `"="`) or starts with a comment prefix. Defaults to `None`.
 
 - **ignore_whitespace_lines** (`bool`, optional)
 
@@ -309,7 +311,7 @@ Parameters will be stored as default read and write parameters.
 
 **Args**
 
-- **parameters** ([`Parameters`](#smartiniparameters) | None, optional)
+- **parameters** ([`Parameters`](#smartiniparameters)`| None`, optional)
 
     Default parameters for reading and writing inis, as an `Parameters` object. `Parameters` can also be passed as kwargs. Missing parameters (because parameters is `None` and no or not enough kwargs are passed) will be taken from default parameters. Defaults to `None`.
 
@@ -405,7 +407,7 @@ Get configuration section(s).
 
     Variable names as keys and the Sections as values. Order is that of the slot structure if `len(slots) == 1`. Otherwise, order matches defined schema structure with undefined sections at the end.
 
-> Note: If `filled_only==False`, unfilled sections will be returned as `SectionMeta` objets (metaclass of [smartini.Section](#smartinisection)).
+> Note: If `filled_only==False`, unfilled sections will be returned as `SectionMeta` objects (metaclass of [smartini.Section](#smartinisection)).
 
 ### smartini.Schema.**read_ini**
 
@@ -553,7 +555,7 @@ Get options of the section.
 
 - **slots** ([`SlotAccess`](#smartinislotaccess), optional)
 
-    Which slot(s) to get options from. If multiple are given, will return the intersection. If None will return all. Defaults to None.
+    Which slot(s) to get options from. If multiple are given, will return the intersection. If `None` will return all. Defaults to `None`.
 
 **Returns**
 
@@ -572,7 +574,7 @@ Set an option's value by accessing it via variable name or option key.
 
 - **name** (`str | None`)
 
-    The variable name of the option. Must be None if key should be used.
+    The variable name of the option. Must be `None` if key should be used.
 
 - **value** (`OptionValue`)
 
@@ -620,14 +622,14 @@ Method to decide which slot to use.
 
 - `"fallback"`
 
-    Uses first slot whenever latest slot is None, otherwise latest slot. This is especially useful if the first slot provides default fallback values for your configuration.
+    Uses first slot whenever latest slot is `None`, otherwise latest slot. This is especially useful if the first slot provides default fallback values for your configuration.
 - `"first"`
 
     Uses first slot.
 
 - `"cascade up"`
 
-    Uses the first slot that is not None from first to latest.
+    Uses the first slot that is not `None` from first to latest.
 
 - `"latest"`
 
@@ -635,7 +637,7 @@ Method to decide which slot to use.
 
 - `"cascade down"`
 
-    Uses first slot that is not None from latest to first. 
+    Uses first slot that is not `None` from latest to first. 
 
 # Why still ini?
 
@@ -668,4 +670,4 @@ By contributing to this project, you agree that your contributions will be licen
 
 # License
 
-Smartini is licensed under the Apache-2.0 license, as found in the [LICENCSE](/LICENSE) file.
+Smartini is licensed under the Apache-2.0 license, as found in the [LICENSE](/LICENSE) file.
