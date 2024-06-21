@@ -733,6 +733,18 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 # we need a current section to extract options and comments
                 continue
 
+            # try to extract comment
+            if (
+                not possible_continuation
+                or "comment_prefix" not in parameters.multiline_ignore
+            ):
+                if comment := self._extract_comment(entity_content, parameters):
+                    comment = self._handle_comment(
+                        comment, current_section, slots=slots
+                    )
+                    current_section_structure.append(comment)
+                    continue
+
             # try to extract option
             if (
                 not possible_continuation
@@ -747,18 +759,6 @@ class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
                         current_option = handled_option
                         current_section_structure.append(current_option)
                         continue
-
-            # try to extract comment
-            if (
-                not possible_continuation
-                or "comment_prefix" not in parameters.multiline_ignore
-            ):
-                if comment := self._extract_comment(entity_content, parameters):
-                    comment = self._handle_comment(
-                        comment, current_section, slots=slots
-                    )
-                    current_section_structure.append(comment)
-                    continue
 
             # possible continuation
             if not current_option:
