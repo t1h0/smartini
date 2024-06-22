@@ -28,7 +28,7 @@ class Parameters:
                 entities (section name, option, comment). Defaults to re.Pattern("\n").
             comment_prefixes (str | re.Pattern | tuple[str | re.Pattern, ...], optional):
                 Prefix characters that denote a comment. If multiple are given,
-                the first will be taken for writing. Defaults to ";".
+                the first will be taken for writing. "[" is not allowed. Defaults to ";".
             option_delimiters (str | re.Pattern | tuple[str | re.Pattern, ...], optional):
                 Delimiter characters that delimit option keys from values. If multiple
                 are given, the first will be taken for writing. Defaults to "=".
@@ -92,10 +92,13 @@ class Parameters:
                 else re.escape(self.entity_delimiter)
             )
 
-        if (not params or "comment_prefixes" in params) and not isinstance(
-            self.comment_prefixes, tuple
-        ):
-            self.comment_prefixes = (self.comment_prefixes,)
+        if not params or "comment_prefixes" in params:
+            if not isinstance(self.comment_prefixes, tuple):
+                self.comment_prefixes = (self.comment_prefixes,)
+            if "[" in self.comment_prefixes:
+                raise ValueError(
+                    "'[' (section name identifier) is not allowed as a comment prefix."
+                )
 
         if (not params or "option_delimiters" in params) and not isinstance(
             self.option_delimiters, tuple
