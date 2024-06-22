@@ -29,7 +29,7 @@ from src.slots import (
     SlotKey,
     SlotDeciderMethods,
     Slots,
-    StructureSlotEntity,
+    _StructureSlotEntity,
     Structure,
 )
 from src.args import Parameters
@@ -55,7 +55,7 @@ class SectionMeta(type):
         #  make sure it's the initialization call
         if (
             __bases
-            and StructureSlotEntity not in __bases
+            and _StructureSlotEntity not in __bases
             and Section in __bases
             and __name != "UndefinedSection"
             and SECTION_NAME_VARIABLE not in __dict
@@ -64,7 +64,7 @@ class SectionMeta(type):
         return super().__new__(cls, __name, __bases, __dict)
 
 
-class Section(StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
+class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     """A configuration section. Holds options and comments. If the actual section name
     differs from class variable, it needs to be assigned to the "_name" class attribute!
     Furthermore, class attributes holding options must not start with
@@ -435,7 +435,7 @@ class _SchemaMeta(type):
 
     def __new__(cls, __name: str, __bases: tuple, __dict: dict):
         #  make sure it's the initialization call
-        if __bases and StructureSlotEntity not in __bases and Schema in __bases:
+        if __bases and _StructureSlotEntity not in __bases and Schema in __bases:
             if wrong_var := next(
                 (
                     var
@@ -452,7 +452,7 @@ class _SchemaMeta(type):
         return super().__new__(cls, __name, __bases, __dict)
 
 
-class Schema(StructureSlotEntity[Section], metaclass=_SchemaMeta):
+class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
     def __init__(
         self,

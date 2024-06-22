@@ -149,7 +149,7 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
                 self[slot] = new_slot_value
 
 
-class SlotEntity[SlotValue]:
+class _SlotEntity[SlotValue]:
 
     def __init__(self, slot_value: type[SlotValue]) -> None:
         """Entity which implements slots to save different values.
@@ -384,7 +384,7 @@ class Structure[StructureItem](list[StructureItem]):
         return -l - 1 <= pos <= l
 
 
-class StructureSlotEntity[StructureItem](SlotEntity[Structure[StructureItem]]):
+class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]]):
 
     def __init__(self) -> None:
         super().__init__(Structure)

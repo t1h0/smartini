@@ -3,7 +3,7 @@
 from typing import overload, Any, Self, TypeVar
 import re
 from src.exceptions import ExtractionError
-from src.slots import SlotAccess, SlotEntity
+from src.slots import SlotAccess, _SlotEntity
 
 T = TypeVar("T")
 
@@ -87,7 +87,7 @@ type OptionValue = Any
 type OptionKey = str
 
 
-class Option(SlotEntity[OptionValue]):
+class Option(_SlotEntity[OptionValue]):
     """An ini option."""
 
     type OptionDelimiter = str | re.Pattern | tuple[str | re.Pattern, ...] | None
