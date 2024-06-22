@@ -652,137 +652,18 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 were defined on initialization. Defaults to None.
             parameters_as_default (bool, optional): Whether to save the parameters for
                 this read as default parameters. Defaults to False.
-            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
             slots (SlotAccess | False, optional): Slot(s) to save the content in.
                 If False will create new slot. Defaults to False.
+            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
         """
-        # define parameters
-        if parameters is None:
-            # take parameters from copy of self._parameters
-            parameters = self._default_parameters
-        assert isinstance(parameters, Parameters)
-        if kwargs:
-            parameters.update(**kwargs)
-        if parameters_as_default:
-            self._default_parameters = parameters
-        if slots is False:
-            # Generate new slot key
-            slot_keys = self._slots.keys()
-            len_slots = len(slot_keys)
-            slots = next(
-                slot_key
-                for slot_key in range(
-                    len_slots,
-                    len_slots * 2 + 1,
-                )
-                if slot_key not in slot_keys
-            )
-            self._slots.add(slots)
-        else:
-            slots = self._slots.slot_access(slots, verify=True)
-
-        # read file
-        file_content = str(read_from_bytes(Path(path).read_bytes()).best())
-
-        current_option: Option | None = None
-        # get unnamed section, delete later if undefined and unused
-        current_section = self._get_unnamed_section(parameters=parameters)
-        current_section_structure: list[Option | Comment] = []
-
-        # split into entities
-        entities = re.split(
-            parameters.entity_delimiter,
-            file_content,
+        return _ReadIni(
+            target=self,
+            path=path,
+            parameters=parameters,
+            parameters_as_default=parameters_as_default,
+            slots=slots,
+            **kwargs,
         )
-
-        for entity_index, entity_content in enumerate(entities):
-
-            entity_content, possible_continuation = (
-                self._check_for_possible_continuation(
-                    entity_content,
-                    current_option,
-                    parameters,
-                )
-            )
-
-            if self._is_empty_entity(entity_content, parameters):
-                # empty entity, skip and close off last option
-                current_option = None
-                continue
-
-            # try to extract section
-            if (
-                not possible_continuation
-                or "section_name" not in parameters.multiline_ignore
-            ):
-                if extracted_section_name := self._extract_section_name(entity_content):
-                    if current_section and current_section_structure:
-                        # reorder old section structure and reset for new section
-                        current_section._set_structure(
-                            new_structure=current_section_structure,
-                            slots=slots,
-                            create_missing_slots=True,
-                        )
-                        current_section_structure = []
-                    current_section = self._handle_section_name(
-                        extracted_section_name, parameters, slots=slots
-                    )
-                    continue
-
-            if current_section is None:
-                # we need a current section to extract options and comments
-                continue
-
-            # try to extract comment
-            if (
-                not possible_continuation
-                or "comment_prefix" not in parameters.multiline_ignore
-            ):
-                if comment := self._extract_comment(entity_content, parameters):
-                    comment = self._handle_comment(
-                        comment, current_section, slots=slots
-                    )
-                    current_section_structure.append(comment)
-                    continue
-
-            # try to extract option
-            if (
-                not possible_continuation
-                or "option_delimiter" not in parameters.multiline_ignore
-            ):
-                if option := self._extract_option(
-                    entity_content, parameters, slots=slots
-                ):
-                    if handled_option := self._handle_option(
-                        option, parameters, current_section, slots=slots
-                    ):
-                        current_option = handled_option
-                        current_section_structure.append(current_option)
-                        continue
-
-            # possible continuation
-            if not current_option:
-                # no option open (e.g. empty line after the last one)
-                raise IniStructureError(
-                    f"line {entity_index} could not be assigned to a key."
-                )
-            if not parameters.multiline_allowed:
-                raise MultilineError(
-                    f"line {entity_index} is multiline but multiline is not allowed."
-                )
-            if not possible_continuation:
-                raise MultilineError(
-                    f"line {entity_index} doesn't follow multiline rules."
-                )
-            self._handle_continuation(entity_content, current_option, slots=slots)
-
-        if (
-            isinstance(
-                unnamed := self._get_unnamed_section(parameters), UndefinedSection
-            )
-            and unnamed.nslot == 0
-        ):
-            del unnamed
 
     @copy_doc(_read_ini, annotations=True)
     def read_ini(self, *args, **kwargs) -> ...:
@@ -914,10 +795,155 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
     def export(self, *args, **kwargs) -> ...:
         return self._export(*args, **kwargs)
 
-    def _get_unnamed_section(self, parameters: Parameters) -> Section | None:
+
+class _ReadIni:
+
+    def __new__(
+        cls,
+        target: Schema,
+        path: str | Path,
+        parameters: Parameters | None = None,
+        parameters_as_default: bool = False,
+        *,
+        slots: SlotAccess | Literal[False] = False,
+        **kwargs,
+    ) -> None:
+        """Read an ini file into target. For more info cf. Schema._read_ini."""
+        # define parameters
+        if parameters is None:
+            # take parameters from copy of self._parameters
+            parameters = target._default_parameters
+        assert isinstance(parameters, Parameters)
+        if kwargs:
+            parameters.update(**kwargs)
+        if parameters_as_default:
+            target._default_parameters = parameters
+        if slots is False:
+            # Generate new slot key
+            slot_keys = target._slots.keys()
+            len_slots = len(slot_keys)
+            slots = next(
+                slot_key
+                for slot_key in range(
+                    len_slots,
+                    len_slots * 2 + 1,
+                )
+                if slot_key not in slot_keys
+            )
+            target._slots.add(slots)
+        else:
+            slots = target._slots.slot_access(slots, verify=True)
+
+        # read file
+        file_content = str(read_from_bytes(Path(path).read_bytes()).best())
+
+        current_option: Option | None = None
+        # get unnamed section, delete later if undefined and unused
+        current_section = cls._get_unnamed_section(target, parameters=parameters)
+        current_section_structure: list[Option | Comment] = []
+
+        # split into entities
+        entities = re.split(
+            parameters.entity_delimiter,
+            file_content,
+        )
+
+        for entity_index, entity_content in enumerate(entities):
+
+            entity_content, possible_continuation = (
+                cls._check_for_possible_continuation(
+                    entity_content,
+                    current_option,
+                    parameters,
+                )
+            )
+
+            if cls._is_empty_entity(entity_content, parameters):
+                # empty entity, skip and close off last option
+                current_option = None
+                continue
+
+            # try to extract section
+            if (
+                not possible_continuation
+                or "section_name" not in parameters.multiline_ignore
+            ):
+                if extracted_section_name := cls._extract_section_name(entity_content):
+                    if current_section and current_section_structure:
+                        # reorder old section structure and reset for new section
+                        current_section._set_structure(
+                            new_structure=current_section_structure,
+                            slots=slots,
+                            create_missing_slots=True,
+                        )
+                        current_section_structure = []
+                    current_section = cls._handle_section_name(
+                        target, extracted_section_name, parameters, slots=slots
+                    )
+                    continue
+
+            if current_section is None:
+                # we need a current section to extract options and comments
+                continue
+
+            # try to extract comment
+            if (
+                not possible_continuation
+                or "comment_prefix" not in parameters.multiline_ignore
+            ):
+                if comment := cls._extract_comment(entity_content, parameters):
+                    comment = cls._handle_comment(comment, current_section, slots=slots)
+                    current_section_structure.append(comment)
+                    continue
+
+            # try to extract option
+            if (
+                not possible_continuation
+                or "option_delimiter" not in parameters.multiline_ignore
+            ):
+                if option := cls._extract_option(
+                    entity_content, parameters, slots=slots
+                ):
+                    if handled_option := cls._handle_option(
+                        option, parameters, current_section, slots=slots
+                    ):
+                        current_option = handled_option
+                        current_section_structure.append(current_option)
+                        continue
+
+            # possible continuation
+            if not current_option:
+                # no option open (e.g. empty line after the last one)
+                raise IniStructureError(
+                    f"line {entity_index} could not be assigned to a key."
+                )
+            if not parameters.multiline_allowed:
+                raise MultilineError(
+                    f"line {entity_index} is multiline but multiline is not allowed."
+                )
+            if not possible_continuation:
+                raise MultilineError(
+                    f"line {entity_index} doesn't follow multiline rules."
+                )
+            cls._handle_continuation(entity_content, current_option, slots=slots)
+
+        if (
+            isinstance(
+                unnamed := cls._get_unnamed_section(target, parameters),
+                UndefinedSection,
+            )
+            and unnamed.nslot == 0
+        ):
+            del unnamed
+
+    @classmethod
+    def _get_unnamed_section(
+        cls, target: Schema, parameters: Parameters
+    ) -> Section | None:
         """Get the unnamed section (always at the beginning of the ini).
 
         Args:
+            target (Schema): Target Schema to read the ini content into.
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
@@ -926,21 +952,22 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         """
         # check if unnamed section is in schema else create UndefinedSection
         try:
-            varname, section = self._get_section(None, filled_only=False)
+            varname, section = target._get_section(None, filled_only=False)
             if isinstance(section, SectionMeta):
                 section = section()
-                setattr(self, varname, section)
+                setattr(target, varname, section)
         except EntityNotFound:
             if parameters.read_undefined in (True, "section"):
                 section = UndefinedSection(section_name=None)
                 varname = UNNAMED_SECTION_NAME
-                setattr(self, varname, section)
+                setattr(target, varname, section)
             else:
                 section = None
 
         return section
 
-    def _extract_section_name(self, line: str) -> SectionName | None:
+    @classmethod
+    def _extract_section_name(cls, line: str) -> SectionName | None:
         """Extract a section name if present in line.
 
         Args:
@@ -955,8 +982,10 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         except ExtractionError:
             return None
 
+    @classmethod
     def _handle_section_name(
-        self,
+        cls,
+        target: Schema,
         extracted_section_name: SectionName,
         parameters: Parameters,
         *,
@@ -965,6 +994,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         """Handle an extracted SectionName (add new section if necessary).
 
         Args:
+            target (Schema): Target Schema to read the ini content into.
             section_name (SectionName): The extracted section name.
             parameters (Parameters): Ini read and write parameters.
             slots (SlotAccess): Slots that the section should have.
@@ -977,13 +1007,13 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         # check if Section exists in schema
         try:
-            section_var, section = self._get_section(
+            section_var, section = target._get_section(
                 extracted_section_name, filled_only=False
             )
             if isinstance(section, SectionMeta):
                 # section is defined but not yet initialized. do so.
                 section = section()
-                setattr(self, section_var, section)
+                setattr(target, section_var, section)
         except EntityNotFound:
             if parameters.read_undefined not in (True, "section"):
                 # section is not defined and undefined sections are not allowed, thus
@@ -992,10 +1022,10 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
             # undefined section
             section_var = _str_to_var(extracted_section_name)
             section = UndefinedSection(extracted_section_name)
-            setattr(self, section_var, section)
+            setattr(target, section_var, section)
 
         # make sure section is in slots
-        self._set_structure_items(
+        target._set_structure_items(
             items=section, positions=None, exist_action="ignore", slots=slots
         )
         # add slot to section
@@ -1003,8 +1033,9 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         return section
 
+    @classmethod
     def _extract_option(
-        self, line: str, parameters: Parameters, *, slots: SlotAccess
+        cls, line: str, parameters: Parameters, *, slots: SlotAccess
     ) -> Option | None:
         """Extract an option if present in line.
 
@@ -1023,8 +1054,9 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         except ExtractionError:
             return None
 
+    @classmethod
     def _handle_option(
-        self,
+        cls,
         extracted_option: Option,
         parameters: Parameters,
         section: Section,
@@ -1064,7 +1096,8 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         return option
 
-    def _extract_comment(self, line: str, parameters: Parameters) -> Comment | None:
+    @classmethod
+    def _extract_comment(cls, line: str, parameters: Parameters) -> Comment | None:
         """Extract an comment if present in line.
 
         Args:
@@ -1080,8 +1113,9 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         except ExtractionError:
             return None
 
+    @classmethod
     def _handle_comment(
-        self, extracted_comment: Comment, section: Section, *, slots: SlotAccess
+        cls, extracted_comment: Comment, section: Section, *, slots: SlotAccess
     ) -> Comment:
         """Handle an extracted Comment (add it to section if necessary).
 
@@ -1098,8 +1132,9 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         section._add_entity(extracted_comment, positions=None, slots=slots)
         return extracted_comment
 
+    @classmethod
     def _check_for_possible_continuation(
-        self, line: str, current_option: Option | None, parameters: Parameters
+        cls, line: str, current_option: Option | None, parameters: Parameters
     ) -> tuple[str, bool]:
         """Check if line is a possible continuation of a multiline and remove the
         multiline prefix from the line.
@@ -1117,11 +1152,12 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         continuation = None
         if parameters.multiline_allowed and current_option:
             # if no last option it can't be a continuation
-            continuation = self._extract_continuation(line, parameters)
+            continuation = cls._extract_continuation(line, parameters)
         is_continuation = continuation is not None
         return (continuation if is_continuation else line, is_continuation)
 
-    def _extract_continuation(self, line: str, parameters: Parameters) -> str | None:
+    @classmethod
+    def _extract_continuation(cls, line: str, parameters: Parameters) -> str | None:
         """Extract a possible continuation from a line.
 
         Args:
@@ -1134,8 +1170,9 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         continuation = re.search(rf"(?<=^{parameters.multiline_prefix}).*", line)
         return None if continuation is None else continuation[0]
 
+    @classmethod
     def _handle_continuation(
-        self, continuation: str, last_option: Option, *, slots: SlotAccess
+        cls, continuation: str, last_option: Option, *, slots: SlotAccess
     ) -> None:
         """Handles a continutation (adds it to the last option).
 
@@ -1153,7 +1190,8 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
             slots=slots,
         )
 
-    def _is_empty_entity(self, entity: str, parameters: Parameters) -> bool:
+    @classmethod
+    def _is_empty_entity(cls, entity: str, parameters: Parameters) -> bool:
         """Check whether an entity qualifies as empty.
 
         Args:

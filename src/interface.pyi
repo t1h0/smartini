@@ -376,9 +376,9 @@ class Schema:
                 were defined on initialization. Defaults to None.
             parameters_as_default (bool, optional): Whether to save the parameters for
                 this read as default parameters. Defaults to False.
-            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
             slots (SlotAccess | False, optional): Slot(s) to save the content in.
                 If False will create new slot. Defaults to False.
+            **kwargs (optional): Parameters as kwargs. See doc of Parameters for details.
         """
 
     @classmethod
