@@ -59,6 +59,9 @@ class Parameters:
                 not undefined sections and their content. If False, will ignore
                 undefined content. Defaults to False.
         """
+        # because comment_prefixes and option_delimiters check each other on setting
+        self._comment_prefixes = ()
+        self._option_delimiters = ()
 
         self.entity_delimiter = entity_delimiter
         self.comment_prefixes = comment_prefixes
@@ -69,7 +72,94 @@ class Parameters:
         self.ignore_whitespace_lines = ignore_whitespace_lines
         self.read_undefined = read_undefined
 
-        self.validate_parameters()
+    @property
+    def entity_delimiter(self) -> str:
+        return self._entity_delimiter
+
+    @entity_delimiter.setter
+    def entity_delimiter(self, value: str | re.Pattern) -> None:
+        self._entity_delimiter = (
+            value.pattern if isinstance(value, re.Pattern) else re.escape(value)
+        )
+
+    @property
+    def comment_prefixes(self) -> tuple[str, ...]:
+        return self._comment_prefixes
+
+    @comment_prefixes.setter
+    def comment_prefixes(
+        self, value: str | re.Pattern | tuple[str | re.Pattern, ...]
+    ) -> None:
+        if not isinstance(value, tuple):
+            value = (value,)
+        value = tuple(
+            val.pattern if isinstance(val, re.Pattern) else re.escape(val)
+            for val in value
+        )
+        if any(val.startswith(re.escape("[")) for val in value):
+            raise ValueError(
+                "'[' (section name identifier) is not allowed as a comment prefix."
+            )
+        if set(value).intersection(self.option_delimiters):
+            raise ValueError(
+                "Option delimiters and comment prefixes have to be distinct from another."
+            )
+        self._comment_prefixes = value
+
+    @property
+    def option_delimiters(self) -> tuple[str, ...]:
+        return self._option_delimiters
+
+    @option_delimiters.setter
+    def option_delimiters(self, value: ...) -> None:
+        if not isinstance(value, tuple):
+            value = (value,)
+        value = tuple(
+            val.pattern if isinstance(val, re.Pattern) else re.escape(val)
+            for val in value
+        )
+        if any(val.startswith(re.escape("[")) for val in value):
+            raise ValueError(
+                "'[' (section name identifier) is not allowed as an option delimiter."
+            )
+        if set(value).intersection(self.comment_prefixes):
+            raise ValueError(
+                "Option delimiters and comment prefixes have to be distinct from another."
+            )
+        self._option_delimiters = value
+
+    @property
+    def multiline_prefix(self) -> str:
+        return self._multiline_prefix
+
+    @multiline_prefix.setter
+    def multiline_prefix(self, value: str | re.Pattern | None) -> None:
+        if value is None:
+            self._multiline_prefix = ""
+        elif isinstance(value, re.Pattern):
+            self._multiline_prefix = value.pattern
+        else:
+            self._multiline_prefix = re.escape(value)
+
+    @property
+    def multiline_ignore(self) -> tuple[
+        Literal["section_name", "option_delimiter", "comment_prefix"],
+        ...,
+    ]:
+        return self._multiline_ignore
+
+    @multiline_ignore.setter
+    def multiline_ignore(
+        self,
+        value: (
+            tuple[
+                Literal["section_name", "option_delimiter", "comment_prefix"],
+                ...,
+            ]
+            | None
+        ),
+    ) -> None:
+        self._multiline_ignore = () if value is None else value
 
     def update(self, **kwargs) -> None:
         """Update parameters with kwargs
@@ -77,46 +167,5 @@ class Parameters:
         Args:
             **kwargs: Keyword-arguments to update the parameters with.
         """
-
         for k, v in kwargs.items():
             setattr(self, k, v)
-        self.validate_parameters(*kwargs.keys())
-
-    def validate_parameters(self, *params) -> None:
-        """Validate parameters for correct functionality."""
-
-        if not params or "entity_delimiter" in params:
-            self.entity_delimiter = (
-                self.entity_delimiter.pattern
-                if isinstance(self.entity_delimiter, re.Pattern)
-                else re.escape(self.entity_delimiter)
-            )
-
-        if not params or "comment_prefixes" in params:
-            if not isinstance(self.comment_prefixes, tuple):
-                self.comment_prefixes = (self.comment_prefixes,)
-            if "[" in self.comment_prefixes:
-                raise ValueError(
-                    "'[' (section name identifier) is not allowed as a comment prefix."
-                )
-
-        if (not params or "option_delimiters" in params) and not isinstance(
-            self.option_delimiters, tuple
-        ):
-            self.option_delimiters = (self.option_delimiters,)
-
-        if not params or "continuation_prefix" in params:
-            self.multiline_prefix = (
-                ""
-                if self.multiline_prefix is None
-                else (
-                    self.multiline_prefix.pattern
-                    if isinstance(self.multiline_prefix, re.Pattern)
-                    else re.escape(self.multiline_prefix)
-                )
-            )
-
-        if (
-            not params or "continuation_ignore" in params
-        ) and self.multiline_ignore is None:
-            self.multiline_ignore = ()
