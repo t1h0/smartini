@@ -1,7 +1,7 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
-from typing import Any, Literal, Self, Callable
+from typing import Any, Literal, Self, Callable, overload
 import itertools
 import re
 from pathlib import Path
@@ -9,14 +9,14 @@ import warnings
 import inspect
 import contextlib
 from charset_normalizer import from_bytes as read_from_bytes
-from src.exceptions import (
+from .exceptions import (
     MultilineError,
     IniStructureError,
     ExtractionError,
     EntityNotFound,
     DuplicateEntityError,
 )
-from src.entities import (
+from .entities import (
     Comment,
     CommentGroup,
     Option,
@@ -24,7 +24,7 @@ from src.entities import (
     SectionName,
     UndefinedOption,
 )
-from src.slots import (
+from .slots import (
     SlotAccess,
     SlotKey,
     SlotDeciderMethods,
@@ -32,15 +32,15 @@ from src.slots import (
     _StructureSlotEntity,
     Structure,
 )
-from src.args import Parameters
-from src.globals import (
+from .args import Parameters
+from .globals import (
     COMMENT_VAR_PREFIX,
     UNNAMED_SECTION_NAME,
     SECTION_NAME_VARIABLE,
     INTERNAL_PREFIX,
     INTERNAL_PREFIX_IN_WORDS,
 )
-from src.utils import _str_to_var
+from .utils import _str_to_var
 from nomopytools.collections_extensions import OrderedDict
 from nomopytools.func import copy_doc
 
@@ -85,6 +85,23 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         for var, option in self._get_option_variable_names().items():
             super().__setattr__(var, option)
             self._schema_structure.append(option)
+
+    @overload
+    def _add_entity(
+        self,
+        entity: UndefinedOption | Option,
+        positions: int | list[int | None] | None = None,
+        *,
+        slots: SlotAccess = None,
+    ) -> UndefinedOption: ...
+    @overload
+    def _add_entity(
+        self,
+        entity: Comment,
+        positions: int | list[int | None] | None = None,
+        *,
+        slots: SlotAccess = None,
+    ) -> Comment: ...
 
     def _add_entity(
         self,
@@ -185,6 +202,21 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     def get_option(self, *args, **kwargs) -> ...:
         return self._get_option(*args, **kwargs)
 
+    @overload
+    def _get_options(
+        self,
+        include_undefined: Literal[False] = ...,
+        *,
+        slots: int | str | list[int | str] = ...,
+    ) -> OrderedDict[str, Option]: ...
+    @overload
+    def _get_options(
+        self,
+        include_undefined: bool | Literal["only"] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Option]: ...
+
     def _get_options(
         self,
         include_undefined: bool | Literal["only"] = True,
@@ -228,13 +260,15 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
         if len(slots_access) == 1:
             # return options in order of slot structure
-            return {
-                k: v
-                for opt in self._slots[slots_access][0]
-                if valid_option(opt)
-                for k, v in vars(self).items()
-                if v == opt
-            }
+            return OrderedDict(
+                {
+                    k: v
+                    for opt in self._slots[slots_access][0]
+                    if valid_option(opt)
+                    for k, v in vars(self).items()
+                    if v == opt
+                }
+            )
 
         options_intersection = {
             opt for slot in self._slots[slots_access] for opt in slot
@@ -276,6 +310,27 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                     )
                 out[var] = Option(key=val)
         return out
+
+    @overload
+    def _set_option(
+        self,
+        name: str,
+        value: OptionValue,
+        positions: int | list[int | None] | None = None,
+        key: ... = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> None: ...
+    @overload
+    def _set_option(
+        self,
+        name: None,
+        value: OptionValue,
+        positions: int | list[int | None] | None = None,
+        key: str = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> None: ...
 
     def _set_option(
         self,
@@ -420,9 +475,10 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
 
 class UndefinedSection(Section):
-    def __init__(self, section_name: str | None) -> None:
-        """Class for sections that are not user-defined in the provided schema.
+    """Class for sections that are not user-defined in the provided schema."""
 
+    def __init__(self, section_name: str | None) -> None:
+        """
         Args:
             section_name (str | None): Name of the section.
         """
@@ -453,6 +509,7 @@ class _SchemaMeta(type):
 
 
 class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
+    """Schema class to define configuration schema and access loaded configurations."""
 
     def __init__(
         self,
@@ -460,8 +517,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         method: SlotDeciderMethods = "fallback",
         **kwargs,
     ) -> None:
-        """Schema class to define configuration schema and access loaded configurations.
-        Parameters will be stored as default read and write parameters.
+        """Parameters will be stored as default read and write parameters.
 
         Args:
             parameters (Parameters | None, optional): Default parameters for reading and
@@ -494,9 +550,6 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
     def __getitem__(self, key: SlotAccess) -> Any:
         return SlotViewer(target=self, slot=key)
-
-    def __setitem__(self, *_, **__) -> None:
-        raise TypeError("Schema doesn't support item assignment.")
 
     def _with_slot(self, slot: SlotAccess) -> Self:
         """Access the ini using a specific slot. Equivalent to item access via brackets
@@ -549,6 +602,23 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
     @copy_doc(_get_section, annotations=True)
     def get_section(self, *args, **kwargs) -> ...:
         return self._get_section(*args, **kwargs)
+
+    @overload
+    def _get_sections(
+        self,
+        filled_only: Literal[True] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section]: ...
+    @overload
+    def _get_sections(
+        self,
+        filled_only: Literal[False] = ...,
+        include_undefined: bool = True,
+        *,
+        slots: None = None,
+    ) -> OrderedDict[str, Section | SectionMeta]: ...
 
     def _get_sections(
         self,
@@ -606,13 +676,15 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         if len(slots_access) == 1:
             # return sections in order of slot structure
-            return {
-                k: v
-                for sec in self._slots[slots_access][0]
-                if valid_section(sec)
-                for k, v in vars(self).items()
-                if v == sec
-            }
+            return OrderedDict(
+                {
+                    k: v
+                    for sec in self._slots[slots_access][0]
+                    if valid_section(sec)
+                    for k, v in vars(self).items()
+                    if v == sec
+                }
+            )
 
         sections_intersection = {
             sec for slot in self._slots[slots_access] for sec in slot

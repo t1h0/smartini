@@ -1,25 +1,16 @@
 from typing import overload, Literal, Self
 import re
 from pathlib import Path
-from src.slots import SlotAccess, SlotKey, SlotDeciderMethods
-from src.entities import Option, OptionValue, UndefinedOption, Comment, SectionName
-from src.args import Parameters
+from .slots import SlotAccess, SlotKey, SlotDeciderMethods
+from .entities import Option, OptionValue, UndefinedOption, Comment, SectionName
+from .args import Parameters
 from nomopytools.collections_extensions import OrderedDict
 
-class SectionMeta(type):
-    """Metaclass for ini configuration file sections."""
-
-    # name of the section. must be provided!
-    _name: str | None
+class SectionMeta(type): ...
 
 class Section:
-    """A configuration section. Holds options and comments. If the actual section name
-    differs from class variable, it needs to be assigned to the "_name" class attribute!
-    Furthermore, class attributes holding options must not start with
-    a leading underscore!
-    """
 
-    # name of the section. must be provided!
+    # name of the section if actual section name differs from class variable
     _name: str | None
 
     @overload
@@ -27,7 +18,7 @@ class Section:
     def _add_entity(
         cls,
         entity: UndefinedOption | Option,
-        positions: int | list[int] | None = None,
+        positions: int | list[int | None] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> UndefinedOption: ...
@@ -36,7 +27,7 @@ class Section:
     def _add_entity(
         cls,
         entity: Comment,
-        positions: int | list[int] | None = None,
+        positions: int | list[int | None] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> Comment: ...
@@ -231,27 +222,16 @@ class Section:
             dict[str, Comment]: Variable names as keys and Comments as values.
         """
 
+class UndefinedSection(Section):
+    def __init__(self, section_name: str | None) -> None: ...
+
 class Schema:
     def __init__(
         self,
         parameters: Parameters | None = None,
         method: SlotDeciderMethods = "fallback",
         **kwargs,
-    ) -> None:
-        """Schema class to define configuration schema and access loaded configurations.
-        Parameters will be stored as default read and write parameters.
-
-        Args:
-            parameters (Parameters | None, optional): Default parameters for reading and
-                writing inis, as a Parameters object. Parameters can also be passed
-                as kwargs. Missing parameters (because parameters is None and no or not
-                enough kwargs are passed) will be taken from default parameters
-                (see doc of Parameters). Defaults to None.
-            method (SlotDeciderMethods, optional): Method for choosing the slot.
-                Defaults to "fallback".
-            **kwargs (optional): Parameters as kwargs. See Parameters doc for details.
-        """
-
+    ) -> None: ...
     def __getitem__(self, key: SlotAccess) -> Self: ...
     @property
     def iloc(self) -> Self: ...

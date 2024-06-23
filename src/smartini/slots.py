@@ -1,4 +1,4 @@
-"""Classes related to slot mechanism"""
+"""SmartIni's slot logic."""
 
 from typing import (
     Literal,
@@ -10,7 +10,7 @@ from typing import (
     Sequence,
 )
 from nomopytools.collections_extensions import OrderedDict
-from src.exceptions import (
+from .exceptions import (
     SlotNotFound,
     SlotAlreadyExists,
     IniStructureError,

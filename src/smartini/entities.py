@@ -2,8 +2,8 @@
 
 from typing import overload, Any, Self, TypeVar
 import re
-from src.exceptions import ExtractionError
-from src.slots import SlotAccess, _SlotEntity
+from .exceptions import ExtractionError
+from .slots import SlotAccess, _SlotEntity
 
 T = TypeVar("T")
 

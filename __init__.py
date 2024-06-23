@@ -1,3 +1,3 @@
-from src.interface import Schema, Section
-from src.args import Parameters
-from src.slots import SlotAccess, SlotDeciderMethods
+from src.smartini.interface import Schema, Section
+from src.smartini.args import Parameters
+from src.smartini.slots import SlotAccess, SlotDeciderMethods

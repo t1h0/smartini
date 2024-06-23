@@ -1,4 +1,4 @@
-from src.globals import INTERNAL_PREFIX, VARIABLE_PREFIX
+from .globals import INTERNAL_PREFIX, VARIABLE_PREFIX
 import re
 
 
