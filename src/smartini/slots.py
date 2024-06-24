@@ -9,7 +9,7 @@ from typing import (
     Any,
     Sequence,
 )
-from nomopytools.collections_extensions import OrderedDict
+from .utils import OrderedDict
 from .exceptions import (
     SlotNotFound,
     SlotAlreadyExists,

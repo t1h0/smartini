@@ -39,9 +39,7 @@ from .globals import (
     INTERNAL_PREFIX,
     INTERNAL_PREFIX_IN_WORDS,
 )
-from .utils import _str_to_var
-from nomopytools.collections_extensions import OrderedDict
-from nomopytools.func import copy_doc
+from .utils import _str_to_var, OrderedDict, copy_doc
 
 
 class SectionMeta(type):

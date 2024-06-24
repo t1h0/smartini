@@ -4,7 +4,7 @@ from pathlib import Path
 from .slots import SlotAccess, SlotKey, SlotDeciderMethods
 from .entities import Option, OptionValue, UndefinedOption, Comment, SectionName
 from .args import Parameters
-from nomopytools.collections_extensions import OrderedDict
+from .utils import OrderedDict
 
 class Section:
 
