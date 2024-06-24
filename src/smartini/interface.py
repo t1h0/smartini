@@ -1281,10 +1281,10 @@ class _ReadIni:
 
 
 class SlotView:
+    """Parent class for slot access."""
 
     def __init__(self, target: Schema | Section) -> None:
-        """Parent class for slot access.
-
+        """
         Args:
             target (Schema | Section): The target that is accessed.
         """
@@ -1348,12 +1348,12 @@ class SlotView:
 
 
 class SlotDecider(SlotView):
+    """Gives access to slots by deciding."""
 
     def __init__(
         self, target: Schema | Section, slots: Slots, decider_method: SlotDeciderMethods
     ) -> None:
-        """Gives access to slots by deciding.
-
+        """
         Args:
             target (Schema | Section): The target to prepare for slot access.
             slots (Slots): The slots to take as reference.
@@ -1457,14 +1457,14 @@ class SlotDecider(SlotView):
 
 
 class SlotViewer(SlotView):
+    """Gives access to a specific slot."""
 
     def __init__(
         self,
         target: Schema | Section,
         slot: SlotAccess,
     ) -> None:
-        """Gives access to a specific slot.
-
+        """
         Args:
             target (Schema | Section): The target to prepare for slot access.
             slot (SlotAccess): The slot to access.
@@ -1509,13 +1509,13 @@ class SlotViewer(SlotView):
 
 
 class SlotIlocViewer(SlotView):
+    """Gives access to a specific slot by index."""
 
     def __init__(
         self,
         target: Schema,
     ) -> None:
-        """Gives access to a specific slot by index.
-
+        """
         Args:
             target (Schema): The target to prepare for slot access.
         """

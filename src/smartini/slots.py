@@ -41,10 +41,10 @@ list[int | str] for multiple slots and None for all slots.
 
 
 class Slots(OrderedDict[SlotKey, SlotValue]):
+    """Container for slots."""
 
     def __init__(self, value_type: type[SlotValue], *args, **kwargs) -> None:
-        """Container for slot objects.
-
+        """
         Args:
             value_type (type[SlotValue]): Type this container's values should have.
         """
@@ -150,10 +150,10 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
 
 
 class _SlotEntity[SlotValue]:
-
+    """Entity which implements slots to save different values."""
+    
     def __init__(self, slot_value: type[SlotValue]) -> None:
-        """Entity which implements slots to save different values.
-
+        """
         Args:
             slot_value (type[Slot]): Type of the values this entity's slots should have.
         """
@@ -369,6 +369,7 @@ StructureItem = TypeVar("StructureItem")
 
 
 class Structure[StructureItem](list[StructureItem]):
+    """Structure saving the order of entities."""
 
     def validate_position(self, pos: int) -> bool:
         """Verify that a position in the structure can be accessed.
@@ -385,6 +386,7 @@ class Structure[StructureItem](list[StructureItem]):
 
 
 class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]]):
+    """Entity that has a Structure in each slot."""
 
     def __init__(self) -> None:
         super().__init__(Structure)

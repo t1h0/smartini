@@ -1,14 +1,16 @@
 from typing import Literal
 import re
+from .entities import Option, Comment
 
 
 class Parameters:
+    """Parameters for reading and writing."""
 
     def __init__(
         self,
         entity_delimiter: str | re.Pattern = re.compile("\n"),
-        comment_prefixes: str | re.Pattern | tuple[str | re.Pattern, ...] = ";",
-        option_delimiters: str | re.Pattern | tuple[str | re.Pattern, ...] = "=",
+        comment_prefixes: Comment.Prefix | tuple[Comment.Prefix, ...] = ";",
+        option_delimiters: Option.Delimiter | tuple[Option.Delimiter, ...] = "=",
         multiline_allowed: bool = True,
         multiline_prefix: str | re.Pattern | None = None,
         multiline_ignore: (
@@ -21,17 +23,17 @@ class Parameters:
         ignore_whitespace_lines: bool = True,
         read_undefined: bool | Literal["section", "option"] = False,
     ) -> None:
-        """Parameters for reading and writing.
-
+        """
         Args:
             entity_delimiter (str | re.Pattern, optional): Delimiter that delimits
                 entities (section name, option, comment). Defaults to re.Pattern("\n").
-            comment_prefixes (str | re.Pattern | tuple[str | re.Pattern, ...], optional):
-                Prefix characters that denote a comment. If multiple are given,
+            comment_prefixes (Comment.Prefix | tuple[Comment.Prefix,...], optional):
+                Prefix character(s) that denote a comment. If multiple are given,
                 the first will be taken for writing. "[" is not allowed. Defaults to ";".
-            option_delimiters (str | re.Pattern | tuple[str | re.Pattern, ...], optional):
-                Delimiter characters that delimit option keys from values. If multiple
-                are given, the first will be taken for writing. Defaults to "=".
+            option_delimiters (Option.Delimiter | tuple[Option.Delimiter,...], optional):
+                Delimiter character(s) that delimit option keys from values. If multiple
+                are given, the first will be taken for writing. "[" is not allowed.
+                Defaults to "=".
             multiline_allowed (bool, optional): Whether continuations of options
                 (i.e. multiline options) are allowed. If False, will throw a
                 ContinuationError for any continuation. Defaults to True.
@@ -41,7 +43,7 @@ class Parameters:
                 prefix is missing). Defaults to None (possible continuation after one
                 entity delimiter).
             multiline_ignore (tuple["section_name" | "option_delimiter" |
-                "comment_prefix", ...] | None, optional): Entitity identifier(s) to ignore
+                "comment_prefix", ...] | None, optional): Entity identifier(s) to ignore
                 while continuing an option's value. Otherwise lines with those identifiers
                 will be interpreted as a new entity instead of a continuation (despite
                 possibly satisfying multiline rules). Useful if a continuation is
@@ -55,7 +57,7 @@ class Parameters:
                 Whether undefined content should be read and stored. If True, will read
                 every undefined content. If "section", will read undefined sections
                 and their content but not undefined options within defined sections.
-                "option" will read undefinied options within defined sections but
+                "option" will read undefined options within defined sections but
                 not undefined sections and their content. If False, will ignore
                 undefined content. Defaults to False.
         """
@@ -88,7 +90,7 @@ class Parameters:
 
     @comment_prefixes.setter
     def comment_prefixes(
-        self, value: str | re.Pattern | tuple[str | re.Pattern, ...]
+        self, value: Comment.Prefix | tuple[Comment.Prefix, ...]
     ) -> None:
         if not isinstance(value, tuple):
             value = (value,)
@@ -111,7 +113,9 @@ class Parameters:
         return self._option_delimiters
 
     @option_delimiters.setter
-    def option_delimiters(self, value: ...) -> None:
+    def option_delimiters(
+        self, value: Option.Delimiter | tuple[Option.Delimiter, ...]
+    ) -> None:
         if not isinstance(value, tuple):
             value = (value,)
         value = tuple(

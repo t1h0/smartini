@@ -10,6 +10,9 @@ T = TypeVar("T")
 
 class Comment:
     """An ini comment."""
+    
+    type Prefix = str | re.Pattern
+    """Character(s) that prefix a comment."""
 
     @overload
     def __init__(
@@ -22,25 +25,24 @@ class Comment:
     def __init__(
         self,
         content_without_prefix: None = ...,
-        prefix: str | re.Pattern | tuple[str | re.Pattern, ...] = ...,
+        prefix: Prefix | tuple[Prefix, ...] = ...,
         content_with_prefix: str = ...,
     ) -> None: ...
 
     def __init__(
         self,
         content_without_prefix: str | None = None,
-        prefix: str | re.Pattern | tuple[str | re.Pattern, ...] | None = None,
+        prefix: Prefix | tuple[Prefix, ...] | None = None,
         content_with_prefix: str | None = None,
     ) -> None:
-        """An ini comment.
-
+        """
         Args:
             content_without_prefix (str | None, optional): Content with prefix removed.
                 Should be None if content_with_prefix is provided, otherwise the latter
                 will be ignored. Defaults to None.
-            prefix (str | re.Pattern | tuple[str | re.Pattern, ...] | None, optional):
-                One or more prefixes that can denote the comment
-                (used for content_with_prefix). Defaults to None.
+            prefix (Prefix | tuple[Prefix, ...] | None, optional):
+                One or more prefixes that can denote the comment (used for
+                content_with_prefix). Defaults to None.
             content_with_prefix (str | None, optional): Content including prefix.
                 Will be ignored if content_without_prefix is provided. Defaults to None.
         """
@@ -90,7 +92,8 @@ type OptionKey = str
 class Option(_SlotEntity[OptionValue]):
     """An ini option."""
 
-    type OptionDelimiter = str | re.Pattern | tuple[str | re.Pattern, ...] | None
+    type Delimiter = str | re.Pattern
+    """Character(s) that delimit(s) Option key from from value."""
 
     def __init__(
         self,
@@ -137,11 +140,11 @@ class Option(_SlotEntity[OptionValue]):
                 create_missing_slots=True, new_slot_value=value, slots=slot
             )
 
-    def to_string(self, delimiter: OptionDelimiter, *, slots: SlotAccess = None) -> str:
-        """Create an ini string out of the option.
+    def to_string(self, delimiter: str, *, slots: SlotAccess = None) -> str:
+        """Convert the Option into an ini string.
 
         Args:
-            delimiter (OptionDelimiter): The delimiter to use for separating option key
+            delimiter (str): The delimiter to use for separating option key
                 and value.
             slot (SlotAccess, optional): The slot to get the value from. If multiple are
                 passed, will take the first that is None (or '' if all are None). If None,
@@ -158,13 +161,13 @@ class Option(_SlotEntity[OptionValue]):
 
     @classmethod
     def from_string(
-        cls, string: str, delimiter: OptionDelimiter, *, slots: SlotAccess = None
+        cls, string: str, delimiter: Delimiter, *, slots: SlotAccess = None
     ) -> Self:
         """Create an Option from a string.
 
         Args:
             string (str): The string that contains the option key and value.
-            delimiter (OptionDelimiter): The delimiter that separates key and value.
+            delimiter (Delimiter): The delimiter that separates key and value.
             slots (SlotAccess, optional): Slot(s) to save the value in. Defaults to None.
 
         Returns:
