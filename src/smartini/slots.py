@@ -151,7 +151,7 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
 
 class _SlotEntity[SlotValue]:
     """Entity which implements slots to save different values."""
-    
+
     def __init__(self, slot_value: type[SlotValue]) -> None:
         """
         Args:
@@ -389,6 +389,9 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
     """Entity that has a Structure in each slot."""
 
     def __init__(self) -> None:
+        # contains the initial structure as saved in schema definition
+        self._schema_structure = Structure()
+
         super().__init__(Structure)
 
     def _set_structure_items(

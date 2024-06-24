@@ -2,7 +2,6 @@
 behind smartini."""
 
 from typing import Any, Literal, Self, Callable, overload
-import itertools
 import re
 from pathlib import Path
 import warnings
@@ -78,13 +77,23 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
         super().__init__()
 
-        # schema_structure contains the initial structure as saved in the schema
-        self._schema_structure = Structure()
-
         # initialize Options
-        for var, option in self._get_option_variable_names().items():
-            super().__setattr__(var, option)
-            self._schema_structure.append(option)
+        for var, val in vars(self.__class__).items():
+            # every string variable without leading and trailing underscores
+            # will be interpreted as an option
+            if (
+                not re.fullmatch(r"^__.*__$", var)
+                and isinstance(val, str)
+                and var != SECTION_NAME_VARIABLE
+            ):
+                if var.startswith(INTERNAL_PREFIX):
+                    raise NameError(
+                        f"'{var}' is interpreted as an Option but Option variable names"
+                        f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
+                    )
+                option = Option(key=val)
+                super().__setattr__(var, Option(key=val))
+                self._schema_structure.append(option)
 
     @overload
     def _add_entity(
@@ -540,6 +549,13 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         self._slot_decider = SlotDecider(self, self._slots, method)
         self.iloc = SlotIlocViewer(self)
 
+        # initialize Sections
+        for var, val in vars(self.__class__).items():
+            if isinstance(val, SectionMeta):
+                section = val()
+                super().__setattr__(var, section)
+                self._schema_structure.append(section)
+
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
         if isinstance(attr, Section):
@@ -565,33 +581,24 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         return self._with_slot(*args, **kwargs)
 
     def _get_section(
-        self, section_name: SectionName | str | None, filled_only: bool = True
-    ) -> tuple[str, Section | SectionMeta]:
+        self, section_name: SectionName | str | None
+    ) -> tuple[str, Section]:
         """Get a section by its name.
 
         Args:
             section_name (SectionName | str | None): The name of the section to get.
-            filled_only (bool, optional): Whether to only look for sections that have been
-                already read from a file (:= filled with content) into any slot.
-                Defaults to True.
 
         Raises:
             EntityNotFound: If the section was not found by its name.
 
         Returns:
-            tuple[str, Section | SectionMeta]: Tuple of variable name and section object.
+            tuple[str, Section]: Tuple of variable name and section object.
         """
-        if filled_only:
-            iterator = vars(self).items()
-            instances = Section
-        else:
-            iterator = itertools.chain(vars(self).items(), vars(self.__class__).items())
-            instances = (Section, SectionMeta)
         try:
             return next(
                 (var, val)
-                for var, val in iterator
-                if isinstance(val, instances)
+                for var, val in vars(self).items()
+                if isinstance(val, Section)
                 and getattr(val, SECTION_NAME_VARIABLE) == section_name
             )
         except StopIteration as e:
@@ -603,36 +610,15 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
     def get_section(self, *args, **kwargs) -> ...:
         return self._get_section(*args, **kwargs)
 
-    @overload
     def _get_sections(
         self,
-        filled_only: Literal[True] = ...,
         include_undefined: bool = True,
         *,
         slots: SlotAccess = None,
-    ) -> OrderedDict[str, Section]: ...
-    @overload
-    def _get_sections(
-        self,
-        filled_only: Literal[False] = ...,
-        include_undefined: bool = True,
-        *,
-        slots: None = None,
-    ) -> OrderedDict[str, Section | SectionMeta]: ...
-
-    def _get_sections(
-        self,
-        filled_only: bool = True,
-        include_undefined: bool = True,
-        *,
-        slots: SlotAccess = None,
-    ) -> OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]:
+    ) -> OrderedDict[str, Section]:
         """Get configuration section(s).
 
         Args:
-            filled_only (bool, optional): Whether to only return sections that have been
-                already read from a file (:= filled with content) into any slot.
-                Defaults to True.
             include_undefined (bool, optional): Whether to also include undefined sections.
                 Defaults to True.
             slots (SlotAccess, optional): Which slot(s) to get sections from. If
@@ -640,36 +626,22 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 return all. Defaults to None.
 
         Returns:
-            OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]: Variable
+            OrderedDict[str, Section]: Variable
                 names as keys and the Sections as values.  Order is that of the slot
                 structure if len(slots) == 1. Otherwise, order matches defined schema
                 structure with undefined sections at the end.
         """
-        if not filled_only and slots is not None:
-            warnings.warn(
-                "If filled_only is set to False, slots selection is not possible. Will ignore argument 'slots'."
-            )
-            slots = None
-
-        if filled_only:
-            section_instances = Section
-            iterator = vars(self).items()
-        else:
-            section_instances = (Section, SectionMeta)
-            iterator = itertools.chain(vars(self.__class__).items(), vars(self).items())
-
         valid_section = (
-            (lambda x: isinstance(x, section_instances))
+            (lambda x: isinstance(x, Section))
             if include_undefined
             else (
-                lambda x: isinstance(x, section_instances)
-                and not isinstance(x, UndefinedSection)
+                lambda x: isinstance(x, Section) and not isinstance(x, UndefinedSection)
             )
         )
 
         if slots is None:
             return OrderedDict(
-                {name: var for name, var in iterator if valid_section(var)}
+                {name: var for name, var in vars(self).items() if valid_section(var)}
             )
 
         slots_access = self._slots.slot_access(slots)
@@ -694,7 +666,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         return OrderedDict(
             {
                 name: var
-                for name, var in iterator
+                for name, var in vars(self).items()
                 if valid_section(var) and var in sections_intersection
             }
         )
@@ -819,15 +791,12 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         out = ""
 
         for sec in self._get_sections(
-            filled_only=structure != "schema",
             include_undefined=include_undefined,
             slots=None if structure == "schema" else access,
         ).values():
             comments = None
 
-            if isinstance(sec, SectionMeta):
-                sec = sec()
-            elif export_comments:
+            if export_comments:
                 comments = sec._assign_comments_to_options(slots=access[0])
 
             # add section name
@@ -1024,10 +993,7 @@ class _ReadIni:
         """
         # check if unnamed section is in schema else create UndefinedSection
         try:
-            varname, section = target._get_section(None, filled_only=False)
-            if isinstance(section, SectionMeta):
-                section = section()
-                setattr(target, varname, section)
+            varname, section = target._get_section(None)
         except EntityNotFound:
             if parameters.read_undefined in (True, "section"):
                 section = UndefinedSection(section_name=None)
@@ -1079,13 +1045,7 @@ class _ReadIni:
 
         # check if Section exists in schema
         try:
-            section_var, section = target._get_section(
-                extracted_section_name, filled_only=False
-            )
-            if isinstance(section, SectionMeta):
-                # section is defined but not yet initialized. do so.
-                section = section()
-                setattr(target, section_var, section)
+            section_var, section = target._get_section(extracted_section_name)
         except EntityNotFound:
             if parameters.read_undefined not in (True, "section"):
                 # section is not defined and undefined sections are not allowed, thus
@@ -1096,7 +1056,7 @@ class _ReadIni:
             section = UndefinedSection(extracted_section_name)
             setattr(target, section_var, section)
 
-        # make sure section is in slots
+        # make sure section is in target._slots
         target._set_structure_items(
             items=section, positions=None, exist_action="ignore", slots=slots
         )

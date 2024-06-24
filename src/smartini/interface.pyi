@@ -6,8 +6,6 @@ from .entities import Option, OptionValue, UndefinedOption, Comment, SectionName
 from .args import Parameters
 from nomopytools.collections_extensions import OrderedDict
 
-class SectionMeta(type): ...
-
 class Section:
 
     # name of the section if actual section name differs from class variable
@@ -248,69 +246,39 @@ class Schema:
 
     @classmethod
     def _get_section(
-        cls, section_name: SectionName | str | None, filled_only: bool = True
-    ) -> tuple[str, Section | SectionMeta]: ...
+        cls, section_name: SectionName | str | None
+    ) -> tuple[str, Section]: ...
     @classmethod
-    def get_section(
-        cls, section_name: SectionName | str | None, filled_only: bool = True
-    ) -> tuple[str, Section | SectionMeta]:
+    def get_section(cls, section_name: SectionName | str | None) -> tuple[str, Section]:
         """Get a section by its name.
 
         Args:
             section_name (SectionName | str | None): The name of the section to get.
-            filled_only (bool, optional): Whether to only look for sections that have been
-                already read from a file (:= filled with content) into any slot.
-                Defaults to True.
 
         Raises:
             EntityNotFound: If the section was not found by its name.
 
         Returns:
-            tuple[str, Section | SectionMeta]: Tuple of variable name and section object.
+            tuple[str, Section]: Tuple of variable name and section object.
         """
 
-    @overload
     @classmethod
     def _get_sections(
         cls,
-        filled_only: Literal[True] = ...,
-        include_undefined: bool = True,
-        *,
-        slots: SlotAccess = None,
-    ) -> OrderedDict[str, Section]: ...
-    @overload
-    @classmethod
-    def _get_sections(
-        cls,
-        filled_only: Literal[False] = ...,
         include_undefined: bool = True,
         *,
         slots: None = None,
-    ) -> OrderedDict[str, Section | SectionMeta]: ...
-    @overload
-    @classmethod
-    def get_sections(
-        cls,
-        filled_only: Literal[True] = ...,
-        include_undefined: bool = True,
-        *,
-        slots: SlotAccess = None,
     ) -> OrderedDict[str, Section]: ...
-    @overload
     @classmethod
     def get_sections(
         cls,
-        filled_only: Literal[False] = ...,
         include_undefined: bool = True,
         *,
         slots: None = None,
-    ) -> OrderedDict[str, Section | SectionMeta]:
+    ) -> OrderedDict[str, Section]:
         """Get configuration section(s).
 
         Args:
-            filled_only (bool, optional): Whether to only return sections that have been
-                already read from a file (:= filled with content) into any slot.
-                Defaults to True.
             include_undefined (bool, optional): Whether to also include undefined
                 sections. Defaults to True.
             slots (SlotAccess, optional): Which slot(s) to get the sections from. If
@@ -318,7 +286,7 @@ class Schema:
                 all. Defaults to None.
 
         Returns:
-            OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]: Variable
+            OrderedDict[str, Section]: Variable
                 names as keys and the Sections as values.  Order is that of the slot
                 structure if len(slots) == 1. Otherwise, order matches defined schema
                 structure with undefined sections at the end.
