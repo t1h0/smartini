@@ -9,10 +9,10 @@ T = TypeVar("T")
 
 
 class Comment:
-    """An ini comment."""
-    
+    """Comment object holding a comment's content."""
+
     type Prefix = str | re.Pattern
-    """Character(s) that prefix a comment."""
+    """Character(s) that prefix(es) a comment."""
 
     @overload
     def __init__(
@@ -74,10 +74,11 @@ class Comment:
         raise ExtractionError("Comment could not be extracted.")
 
     def to_string(self, prefix: str | None) -> str:
-        """Create ini string out of the Comment.
+        """Convert the Comment into an ini string.
 
         Args:
-            prefix (str | None, optional): Prefix to use for the string. Returns to None.
+            prefix (str | None, optional): Prefix to use for the string.
+                Defaults to None.
 
         Returns:
             str: The ini string.
@@ -90,7 +91,7 @@ type OptionKey = str
 
 
 class Option(_SlotEntity[OptionValue]):
-    """An ini option."""
+    """Option object holding an option's value (per slot) and key."""
 
     type Delimiter = str | re.Pattern
     """Character(s) that delimit(s) Option key from from value."""
@@ -101,8 +102,7 @@ class Option(_SlotEntity[OptionValue]):
         values: Any | list[Any] | None = None,
         slots: SlotAccess = None,
     ) -> None:
-        """An ini option.
-
+        """
         Args:
             key (str | int | None, optional): The option key. Should be None if
                 from_string is provided, otherwise from_string will be ignored.
@@ -147,8 +147,9 @@ class Option(_SlotEntity[OptionValue]):
             delimiter (str): The delimiter to use for separating option key
                 and value.
             slot (SlotAccess, optional): The slot to get the value from. If multiple are
-                passed, will take the first that is None (or '' if all are None). If None,
-                will take the first that is None of all slots. Defaults to None.
+                passed, will take the first that is not None (or return an empty string
+                if all are None). If None, will take the first that is not None
+                of all slots. Defaults to None.
 
         Returns:
             str: The ini string.
@@ -197,7 +198,7 @@ class Option(_SlotEntity[OptionValue]):
 
 
 class CommentGroup(list[Comment]):
-    """Group of comments."""
+    """Group of Comments."""
 
     def to_string(self, prefix: str, entity_delimiter: str) -> str:
         """Convert group of Comments to one ini string.
@@ -213,9 +214,12 @@ class CommentGroup(list[Comment]):
 
 
 class UndefinedOption(Option):
-    """Option, that is not in the provided ini schema."""
+    """Option, that is not hard coded in the provided schema."""
 
     def __init__(self, *args, **kwargs) -> None:
+        """Takes args and kwargs identical to Option. Can also take an Option to copy its
+        attributes.
+        """
         # convert Option to UndefinedOption if provided
         if len(args) == 1 and not kwargs and isinstance(option := args[0], Option):
             args = ()
@@ -225,6 +229,7 @@ class UndefinedOption(Option):
 
 
 class SectionName(str):
+    """A configuration section's name."""
 
     @overload
     def __new__(cls, name: str = ..., name_with_brackets: None = ...) -> Self: ...
@@ -235,8 +240,7 @@ class SectionName(str):
     def __new__(
         cls, name: str | None = None, name_with_brackets: str | None = None
     ) -> Self:
-        """An ini section's name.
-
+        """
         Args:
             name (str | None, optional): Name of the section. Should be
                 None if name_with_brackets is provided, otherwise name_with_brackets

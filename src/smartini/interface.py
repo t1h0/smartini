@@ -64,7 +64,7 @@ class SectionMeta(type):
 
 
 class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
-    """A configuration section. Holds options and comments. If the actual section name
+    """A configuration section. Holds Options and Comments. If the actual section name
     differs from class variable, it needs to be assigned to the "_name" class attribute!
     Furthermore, class attributes holding options must not start with
     a leading underscore!
@@ -298,7 +298,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
     @classmethod
     def _get_option_variable_names(cls) -> OrderedDict[str, Option]:
-        """Get varibale names of all options this section owns.
+        """Get variable names of all options this section owns.
 
         Returns:
             OrderedDict[str, Option]: Variable names as keys, Options as values.

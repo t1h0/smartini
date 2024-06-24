@@ -26,6 +26,13 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
   - [Multiline options](#multiline-options)
   - [Undefined configurations](#undefined-configurations)
 - [Documentation](#documentation)
+  - [smartini.**Comment**](#smartinicomment)
+    - [smartini.Comment.**content**](#smartinicommentcontent)
+    - [smartini.Comment.**Prefix**](#smartinicommentprefix)
+    - [smartini.Comment.**to\_string**](#smartinicommentto_string)
+  - [smartini.**Option**](#smartinioption)
+    - [smartini.Option.**Delimiter**](#smartinioptiondelimiter)
+    - [smartini.Option.**to\_string**](#smartinioptionto_string)
   - [smartini.**Parameters**](#smartiniparameters)
   - [smartini.**Schema**](#smartinischema)
     - [smartini.Schema.**export**](#smartinischemaexport)
@@ -39,8 +46,10 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
     - [smartini.Section.**get\_option**](#smartinisectionget_option)
     - [smartini.Section.**get\_options**](#smartinisectionget_options)
     - [smartini.Section.**set\_option**](#smartinisectionset_option)
-    - [smartini.**SlotAccess**](#smartinislotaccess)
-    - [smartini.**SlotDeciderMethods**](#smartinislotdecidermethods)
+  - [smartini.**SectionName**](#smartinisectionname)
+  - [smartini.**SlotAccess**](#smartinislotaccess)
+  - [smartini.**SlotDeciderMethods**](#smartinislotdecidermethods)
+  - [smartini.**UndefinedOption**](#smartiniundefinedoption)
 - [Why still ini?](#why-still-ini)
 - [Contributing](#contributing)
 - [License](#license)
@@ -256,13 +265,125 @@ Smartini can also read configurations that are not defined in-code in your [Sche
 
 # Documentation
 
+## smartini.**Comment**
+
+Comment object holding a comment's content.
+
+```python
+Comment(content_without_prefix = None, prefix = None, content_with_prefix = None)
+```
+
+**Args**
+
+- **content_without_prefix** (`str | None`, optional)
+
+    Content with prefix removed. Should be `None` if `content_with_prefix` is provided, otherwise the latter will be ignored. Defaults to `None`.
+
+- **prefix** (`str | re.Pattern | tuple[str | re.Pattern, ...] | None`, optional)
+
+    One or more prefixes that can denote the comment (used for `content_with_prefix`). Defaults to `None`.
+
+- **content_with_prefix** (`str | None`, optional)
+
+    Content including prefix. Will be ignored if `content_without_prefix` is provided. Defaults to `None`.
+
+### smartini.Comment.**content**
+
+```python
+Comment.content
+```
+
+The comment's content.
+
+### smartini.Comment.**Prefix**
+
+```python
+type Prefix = str | re.Pattern
+```
+
+Character(s) that prefix(es) a comment.
+
+### smartini.Comment.**to_string**
+
+```python
+Comment.to_string(prefix)
+```
+
+Convert the Comment into an ini string.
+
+**Args**
+
+- **prefix** (`str | None`, optional)
+
+    Prefix to use for the string. Returns to None.
+
+**Returns**
+
+- `str`
+
+    The ini string.
+
+## smartini.**Option**
+
+Option object holding an option's value (per slot) and key.
+
+```python
+Option(key, values = None, slots = None)
+```    
+
+**Args**
+
+- **key** (`str | int | None`, optional)
+
+    The option key. Should be `None` if `from_string` is provided, otherwise `from_string` will be ignored. Defaults to `None`.
+
+- **values** (`Any | list[Any] | None`, optional)
+
+    The option value or values (one value per slot or one/same value for all slots). Should be `None` if `from_string` is provided, otherwise `from_string` will be ignored. Defaults to `None`.
+
+- **slots** (`SlotAccess`, optional)
+
+    Slot(s) to save value(s) in. If `None`, will create numerical slot keys starting from `0`. Otherwise, number of slots must match number of values, unless number of values is `1` (:= same value for all slots). Defaults to `None`.
+
+### smartini.Option.**Delimiter**
+
+```python
+type Delimiter = str | re.Pattern
+```
+
+Character(s) that delimit(s) Option key from from value.
+
+### smartini.Option.**to_string**
+
+```python
+to_string(delimiter, *, slots = None)
+```
+
+Convert the Option into an ini string.
+
+**Args**
+
+- **delimiter** (`str`)
+
+    The delimiter to use for separating option key and value.
+
+- **slot** (`SlotAccess`, optional)
+
+    The slot to get the value from. If multiple are passed, will take the first that is not `None` (or return an empty string if all are `None`). If `None`, will take the first that is not None of all slots. Defaults to `None`.
+
+**Returns**
+
+- `str`
+
+    The ini string.    
+
 ## smartini.**Parameters**
+
+Parameters for reading and writing.
 
 ```python
 Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False)
 ```
-
-Parameters for reading and writing.
 
 **Args**
     
@@ -270,13 +391,13 @@ Parameters for reading and writing.
 
     Delimiter that delimits entities (section name, option, comment). Defaults to `re.Pattern("\n")`.
 
-- **comment_prefixes** (`str | re.Pattern | tuple[str | re.Pattern, ...]`, optional)
+- **comment_prefixes** ([`Comment.Prefix`](#smartinicommentprefix)`| tuple[Comment.Prefix, ...]`, optional)
 
-    Prefix characters that denote a comment. If multiple are given, the first will be taken for writing. Defaults to `";"`.
+    Prefix character(s) that denote a comment. If multiple are given, the first will be taken for writing. `"["` is not allowed. Defaults to `";"`.
 
-- **option_delimiters** (`str | re.Pattern | tuple[str | re.Pattern, ...]`, optional)
+- **option_delimiters** ([`Option.Delimiter`](#smartinioptiondelimiter)`| tuple[Option.Delimiter, ...]`, optional)
 
-    Delimiter characters that delimit option keys from values. If multiple are given, the first will be taken for writing. Defaults to `"="`.
+    Delimiter character(s) that delimit option keys from values. If multiple are given, the first will be taken for writing. `"["` is not allowed. Defaults to `"="`.
 
 - **multiline_allowed** (`bool`, optional)
 
@@ -299,14 +420,14 @@ Parameters for reading and writing.
     
     Whether undefined content should be read and stored. If `True`, will read every undefined content. If `"section"`, will read undefined sections and their content but not undefined options within defined sections. `"option"` will read undefinied options within defined sections but not undefined sections and their content. If `False`, will ignore undefined content. Defaults to `False`.
 
-
 ## smartini.**Schema**
+
+Schema class to define configuration schema and access loaded configurations.
 
 ```python
 Schema(parameters = None, method = "fallback", **kwargs)
 ```
 
-Schema class to define configuration schema and access loaded configurations.
 Parameters will be stored as default read and write parameters.
 
 **Args**
@@ -351,7 +472,7 @@ Export the saved configuration to a file.
 
 - **export_comments** (`bool`, optional)
 
-    Whether to export comments. Will use first content slot to get comments from.  Comments will be matched to following entities (e.g. all comments above option_a will be above option_a in the exported ini). Defaults to `False`.
+    Whether to export comments. Will use first content slot to get comments from. Comments will be matched to following entities (e.g. all comments above option_a will be above option_a in the exported ini). Defaults to `False`.
 
 - **content_slots** ([`SlotAccess`](#smartinislotaccess), optional)
 
@@ -360,40 +481,33 @@ Export the saved configuration to a file.
 ### smartini.Schema.**get_section**
 
 ```python
-Schema.get_section(section_name, filled_only = True)
+Schema.get_section(section_name)
 ```
 
 Get a section by its name.
 
 **Args**
 
-- **section_name** (`SectionName | str | None`)
+- **section_name** ([`SectionName`](#smartinisectionname)` | str | None`)
 
     The name of the section to get.
 
-- **filled_only** (`bool`, optional)
-    
-     Whether to only look for sections that have been already read from a file (:= filled with content) into any slot. Defaults to `True`.
-
 **Returns**
 
-- `tuple[str, Section | SectionMeta]`
+- `tuple[str, `[`Section`](#smartinisection)`]`
 
     Tuple of variable name and section object.
 
 ### smartini.Schema.**get_sections**
 
 ```python
-Schema.get_sections(filled_only = True, include_undefined = True, *, slots = None)
+Schema.get_sections(include_undefined = True, *, slots = None)
 ```
 
 Get configuration section(s).
 
 **Args**
 
-- **filled_only** (`bool`, optional)
-
-    Whether to only return sections that have been already read from a file (:= filled with content) into any slot. Defaults to `True`.
 - **include_undefined** (`bool`, optional)
   
     Whether to also include undefined sections. Defaults to `True`.
@@ -403,11 +517,9 @@ Get configuration section(s).
 
 **Returns**
 
-- `OrderedDict[str, Section] | OrderedDict[str, Section | SectionMeta]`
+- `OrderedDict[str, `[`Section`](#smartinisection)`]`
 
     Variable names as keys and the Sections as values. Order is that of the slot structure if `len(slots) == 1`. Otherwise, order matches defined schema structure with undefined sections at the end.
-
-> Note: If `filled_only==False`, unfilled sections will be returned as `SectionMeta` objects (metaclass of [smartini.Section](#smartinisection)).
 
 ### smartini.Schema.**read_ini**
 
@@ -468,7 +580,7 @@ True
 
 ## smartini.**Section**
 
-A configuration section. Holds options and comments. **If the actual section name differs from class variable, it needs to be assigned to the *_name* class attribute! Furthermore, class attributes holding options must not start with a leading underscore!**
+A configuration section. Holds [Options](#smartinioption) and [Comments](#smartinicomment). **If the actual section name differs from class variable, it needs to be assigned to the *_name* class attribute! Furthermore, class attributes holding options must not start with a leading underscore!**
 
 ### smartini.Section.**add_entity**
 
@@ -479,7 +591,7 @@ Add a new entity to the section.
 
 **Args**
     
-- **entity** (`UndefinedOption | Option | Comment`)
+- **entity** ([`UndefinedOption`](#smartiniundefinedoption)` | `[`Option`](#smartinioption)` | `[`Comment`](#smartinicomment))
 
     The entity to add.
 
@@ -493,7 +605,7 @@ Add a new entity to the section.
 
 **Returns**
 
-- `UndefinedOption | Comment`
+- ([`UndefinedOption`](#smartiniundefinedoption)` | `[`Comment`](#smartinicomment))
 
     The newly created entity.
 
@@ -513,9 +625,9 @@ Get a comment by its content.
 
 **Returns**
 
-- `dict[str, Comment]`
+- `dict[str, `[`Comment`](#smartinicomment)`]`
 
-    All comments that fit the content argument with variable names as keys and the `Comment` objects as values.    
+    All comments that fit the content argument with variable names as keys and the [`Comment`](#smartinicomment) objects as values.    
 
 ### smartini.Section.**get_option**
 
@@ -592,30 +704,49 @@ Set an option's value by accessing it via variable name or option key.
 
     The slot(s) to use. Defaults to `None` (all slots).
 
-### smartini.**SlotAccess**
+## smartini.**SectionName**
+
+A configuration section's name.
 
 ```python
-int | str | list[int | str] | None
+SectionName(name = None, name_with_brackets = None)
+```
+
+**Args**
+
+- **name** (`str | None`, optional)
+
+    Name of the section. Should be `None` if `name_with_brackets` is provided, otherwise `name_with_brackets` will be ignored. Defaults to `None`.
+
+- **name_with_brackets** (`str | None`, optional)
+
+    The name of the section within brackets (to extract the name from). If provided, `name` argument should be `None`, otherwise will be ignored. Defaults to `None`.
+
+
+## smartini.**SlotAccess**
+
+```python
+type SlotAccess = int | str | list[int | str] | None
 ```
 
 Identifier for which slot(s) to access.
 
 - `int | str`
 
-    Identifier for a single slot
+    Identifier for a single slot.
 
 - `list[int | str]`
 
-    Identifier for multiple slots
+    Identifier for multiple slots.
 
 - `None`
 
     All slots.
 
-### smartini.**SlotDeciderMethods**
+## smartini.**SlotDeciderMethods**
 
 ```python
-"fallback" | "first" | "cascade up" | "latest" | "cascade down"
+type SlotDeciderMethods = "fallback" | "first" | "cascade up" | "latest" | "cascade down"
 ```
 
 Method to decide which slot to use.
@@ -637,7 +768,17 @@ Method to decide which slot to use.
 
 - `"cascade down"`
 
-    Uses first slot that is not `None` from latest to first. 
+    Uses first slot that is not `None` from latest to first.
+
+## smartini.**UndefinedOption**
+
+Option, that is not hard coded in the provided schema.
+
+```python
+UndefinedOption(*args,**kwargs)
+```
+
+Takes args and kwargs identical to [`Option`](#smartinioption). Can also take an Option to copy its attributes.
 
 # Why still ini?
 
@@ -665,6 +806,8 @@ As of now, this has been a one person project. If you want to contribute to it, 
     ```
 
 3. Send a pull request once you're done :)
+
+> Note: SmartIni's stub files "fool" type checkers by giving them false type annotations to ensure intuitive functionality (e.g. `Schema.iloc` is annotated to return the `Schema` (`Self`) although it actually returns a `SlotIlocViewer`). For development, you should disable the stub files (i.e. ignore them in your type checker config or rename them).
 
 By contributing to this project, you agree that your contributions will be licensed under the project's [license](/LICENSE).
 
