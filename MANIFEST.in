@@ -1,0 +1,5 @@
+include MANIFEST.in
+include LICENSE
+include requirements.txt
+prune src/smartini/dev
+prune test 
