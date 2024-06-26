@@ -34,9 +34,9 @@ type SlotDeciderMethods = Literal[
 
 SlotValue = TypeVar("SlotValue")
 type SlotKey = int | str
-type SlotAccess = int | str | list[int | str] | None
+type SlotAccess = SlotKey | list[SlotKey] | None
 """Identifier for which slot(s) to access. int or str identifier for a single slot,
-list[int | str] for multiple slots and None for all slots.
+list[SlotKey] for multiple slots and None for all slots.
 """
 
 
@@ -55,9 +55,9 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
     def __getitem__(self, slots: None | list) -> list[SlotValue]: ...
 
     @overload
-    def __getitem__(self, slots: int | str) -> SlotValue: ...
+    def __getitem__(self, slots: SlotKey) -> SlotValue: ...
 
-    def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue | None:
+    def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue:
         if slots is None:
             return list(self.values())
         try:
@@ -91,7 +91,7 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
 
     def slot_access(
         self, slot_access: SlotAccess, verify: bool | None = None
-    ) -> list[int | str]:
+    ) -> list[SlotKey]:
         """Normalize slot_access to an iterable with slot keys.
 
         Args:
@@ -100,7 +100,7 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
                 slots exist (True) or don't exist (False). Won't if None.
                 Defaults to None.
         Returns:
-            Iterable[int | str]: Iterable with slot keys.
+            Iterable[SlotKey]: Iterable with slot keys.
         """
         if slot_access is None:
             slots = list(self.keys())
@@ -220,13 +220,13 @@ class _SlotEntity[SlotValue]:
     def __getitem__(self, slots: None | list) -> list[SlotValue]: ...
 
     @overload
-    def __getitem__(self, slots: int | str) -> SlotValue: ...
+    def __getitem__(self, slots: SlotKey) -> SlotValue: ...
 
-    def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue | None:
+    def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue:
         return self._slots[slots]
 
     def __setitem__(self, slots: SlotAccess, value: Any) -> None:
-        self._slots.set_slots(value=value, slots=slots)
+        self._slots.set_slots(new_slot_value=value, slots=slots)
 
     def _get_slots(self, slots: SlotAccess, default: Any = None) -> Any:
         try:
