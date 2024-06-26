@@ -303,7 +303,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         """
         out = OrderedDict()
         for var, val in vars(cls).items():
-            # every string variable without leading and trailing doublescores
+            # every string variable without leading and trailing underscores
             # will be interpreted as an option
             if (
                 not re.fullmatch(r"^__.*__$", var)
@@ -386,7 +386,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         # set option value
         option._set_slots(new_slot_value=value, slots=slots, add_missing_slots=True)
 
-        # set stucture position
+        # set structure position
         self._set_structure_items(
             items=option, positions=positions, exist_action="move_not_None", slots=slots
         )
@@ -986,7 +986,7 @@ class _ReadIni:
             parameters (Parameters): Ini read and write parameters.
 
         Returns:
-            Section | None: The unnamed section or None if unnamed section undefinied
+            Section | None: The unnamed section or None if unnamed section undefined
                 and not allowed.
         """
         # check if unnamed section is in schema else create UndefinedSection
@@ -1204,7 +1204,7 @@ class _ReadIni:
     def _handle_continuation(
         cls, continuation: str, last_option: Option, *, slots: SlotAccess
     ) -> None:
-        """Handles a continutation (adds it to the last option).
+        """Handles a continuation (adds it to the last option).
 
         Args:
             continuation (str): The continuation.
@@ -1266,18 +1266,18 @@ class SlotView:
             if v == SlotAccess
         ]
 
-        def accesser_func(*args, **kwargs):
+        def accessor_func(*args, **kwargs):
             for access_kwarg in access_kwargs:
                 kwargs[access_kwarg] = slot
             return access_target(*args, **kwargs)
 
-        return accesser_func
+        return accessor_func
 
     def _set_slot(self, name: str, value: Any, slot: SlotAccess) -> None:
         """Set the slot(s) of an option.
 
         Args:
-            name (str): Variable name of the optino.
+            name (str): Variable name of the option.
             value (Any): The new option value.
             slot (SlotAccess): Slot(s) to set.
 

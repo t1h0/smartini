@@ -164,7 +164,7 @@ class _SlotEntity[SlotValue]:
     def _nslot(self) -> int:
         """Number of slots for this entity.
 
-        Note: Private (underscore) property added for compability with interface objects
+        Note: Private (underscore) property added for compatibility with interface objects
         that have _nslot properties.
 
         Returns:
@@ -404,7 +404,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
         *,
         slots: SlotAccess = None,
     ) -> None:
-        """Insert items into the struture.
+        """Insert items into the structure.
 
         Args:
             items (StructureItem | list[StructureItem]): The item(s) to insert.

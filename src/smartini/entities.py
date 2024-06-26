@@ -120,7 +120,7 @@ class Option(_SlotEntity[OptionValue]):
 
         self.key = key
 
-        # veryfying slots
+        # verifying slots
         if slots is None:
             slots = list(range(len(values))) if isinstance(values, list) else [0]
         elif not isinstance(slots, list):
@@ -265,6 +265,6 @@ class SectionName(str):
                 f"Could not extract section name from {name_with_brackets}"
             )
         raise ValueError(
-            "name or name_with_bracktes must be provided for"
+            "name or name_with_brackets must be provided for"
             " initialization of a SectionName"
         )
