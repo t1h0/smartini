@@ -137,7 +137,7 @@ class Option(_SlotEntity[OptionValue]):
 
         for slot, value in zip(slots, values):
             self._slots.set_slots(
-                create_missing_slots=True, new_slot_value=value, slots=slot
+                create_missing_slots=True, value=value, slots=slot
             )
 
     def to_string(self, delimiter: str, *, slots: SlotAccess = None) -> str:

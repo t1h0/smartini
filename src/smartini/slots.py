@@ -118,21 +118,18 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
 
     def set_slots(
         self,
-        new_slot_value: SlotValue | None = None,
+        value: SlotValue,
         create_missing_slots=False,
         *,
         slots: SlotAccess = None,
-        **kwargs,
     ) -> None:
         """Set the content of specified slots.
 
         Args:
-            new_slot_value (SlotValue | None, optional): New value all slots should take.
-                If None, will access kwargs. Defaults to None.
+            value (SlotValue): New value all slots should take.
             slots (SlotAccess, optional): Slots to set. Defaults to None.
             create_missing_slots (bool, optional): Whether to create slots that are
                 specified but don't exist in the entity. Defaults to False.
-            **kwargs: Keyword-arguments to set, corresponding to entity slot attributes.
         """
         for slot in self.slot_access(slots):
             if slot not in self:
@@ -141,12 +138,7 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
                         f"Slot '{slot}' can't be set because it doesn't exist."
                     )
                 self.add(slot)
-            if new_slot_value is None:
-                slot_object = self[slot]
-                for k, v in kwargs.items():
-                    setattr(slot_object, k, v)
-            else:
-                self[slot] = new_slot_value
+            self[slot] = value
 
 
 class _SlotEntity[SlotValue]:
@@ -193,27 +185,24 @@ class _SlotEntity[SlotValue]:
 
     def _set_slots(
         self,
-        new_slot_value: SlotValue | None = None,
+        value: SlotValue,
         create_missing_slots=False,
         *,
         slots: SlotAccess = None,
-        **kwargs,
     ) -> None:
         """Set the content of specified slots.
 
         Args:
-            new_slot_value (SlotValue | None, optional): New value all slots should take.
-                If None, will access kwargs. Defaults to None.
+            value (SlotValue): New value all slots should take.
             slots (SlotAccess, optional): Slots to set. Defaults to None.
             create_missing_slots (bool, optional): Whether to create slots that are
                 specified but don't exist in the entity. Defaults to False.
             **kwargs: Keyword-arguments to set, corresponding to entity slot attributes.
         """
         return self._slots.set_slots(
-            new_slot_value=new_slot_value,
+            value=value,
             create_missing_slots=create_missing_slots,
             slots=slots,
-            **kwargs,
         )
 
     @overload
@@ -226,7 +215,7 @@ class _SlotEntity[SlotValue]:
         return self._slots[slots]
 
     def __setitem__(self, slots: SlotAccess, value: Any) -> None:
-        self._slots.set_slots(new_slot_value=value, slots=slots)
+        self._slots.set_slots(value=value, slots=slots)
 
     def _get_slots(self, slots: SlotAccess, default: Any = None) -> Any:
         try:
@@ -477,7 +466,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
             )
         self._set_slots(
             create_missing_slots=create_missing_slots,
-            new_slot_value=Structure(new_structure),
+            value=Structure(new_structure),
             slots=slots,
         )
 
