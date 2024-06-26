@@ -384,7 +384,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                 ) from ee
 
         # set option value
-        option._set_slots(new_slot_value=value, slots=slots, add_missing_slots=True)
+        option._set_slots(value=value, slots=slots, add_missing_slots=True)
 
         # set stucture position
         self._set_structure_items(
@@ -1110,7 +1110,7 @@ class _ReadIni:
         try:
             option = section._get_option(key=extracted_option.key)
             option._set_slots(
-                new_slot_value=extracted_option.iloc[-1][1],
+                value=extracted_option.iloc[-1][1],
                 slots=slots,
                 create_missing_slots=True,
             )
