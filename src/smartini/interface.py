@@ -73,9 +73,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     # name of the section if actual section name differs from class variable
     _name: str | None
 
-    def __init__(
-        self, default_type_converter: type[converters.TypeConverter] | None = None
-    ) -> None:
+    def __init__(self, parameters: Parameters) -> None:
 
         super().__init__()
 
@@ -107,7 +105,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                         None,
                     )
                 if type_converter is None:
-                    type_converter = default_type_converter
+                    type_converter = parameters.type_converter
                 option = Option(key=val, type_converter=type_converter)
                 super().__setattr__(var, option)
                 self._schema_structure.append(option)
@@ -503,13 +501,14 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 class UndefinedSection(Section):
     """Class for sections that are not user-defined in the provided schema."""
 
-    def __init__(self, section_name: str | None) -> None:
+    def __init__(self, section_name: str | None, parameters: Parameters) -> None:
         """
         Args:
             section_name (str | None): Name of the section.
+            parameters (Parameters): Read and write parameters.
         """
         setattr(self, SECTION_NAME_VARIABLE, section_name)
-        super().__init__()
+        super().__init__(parameters)
 
 
 class _SchemaMeta(type):
@@ -1015,7 +1014,9 @@ class _ReadIni:
             varname, section = target._get_section(None)
         except EntityNotFound:
             if parameters.read_undefined in (True, "section"):
-                section = UndefinedSection(section_name=None)
+                section = UndefinedSection(
+                    section_name=None, parameters=target._default_parameters
+                )
                 varname = UNNAMED_SECTION_NAME
                 setattr(target, varname, section)
             else:
@@ -1072,7 +1073,10 @@ class _ReadIni:
 
             # undefined section
             section_var = _str_to_var(extracted_section_name)
-            section = UndefinedSection(extracted_section_name)
+            section = UndefinedSection(
+                section_name=extracted_section_name,
+                parameters=target._default_parameters,
+            )
             setattr(target, section_var, section)
 
         # make sure section is in target._slots
