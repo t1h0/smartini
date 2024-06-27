@@ -1,9 +1,11 @@
 """Ini entities are either a section name, an option or a comment."""
 
 from typing import overload, Any, Self, TypeVar
+from dataclasses import dataclass
 import re
 from .exceptions import ExtractionError
 from .slots import SlotAccess, _SlotEntity
+from .type_converters.converters import TypeConverter
 
 T = TypeVar("T")
 
@@ -87,10 +89,26 @@ class Comment:
 
 
 type OptionValue = Any
+"""An option's value."""
 type OptionKey = str
+"""An option's key."""
 
 
-class Option(_SlotEntity[OptionValue]):
+@dataclass(slots=True)
+class OptionSlotValue:
+    """Value of one Option slot.
+
+    Args:
+        input (OptionValue): The original input value.
+        converted (OptionValue): The converted input if TypeConverter was set, otherwise
+            the input again.
+    """
+
+    input: OptionValue | None = None
+    converted: OptionValue | None = None
+
+
+class Option(_SlotEntity[OptionSlotValue]):
     """Option object holding an option's value (per slot) and key."""
 
     type Delimiter = str | re.Pattern
@@ -100,6 +118,7 @@ class Option(_SlotEntity[OptionValue]):
         self,
         key: OptionKey,
         values: Any | list[Any] | None = None,
+        type_converter: type[TypeConverter] | None = None,
         slots: SlotAccess = None,
     ) -> None:
         """
@@ -111,14 +130,20 @@ class Option(_SlotEntity[OptionValue]):
                 (one value per slot or one/same value for all slots). Should be None if
                 from_string is provided, otherwise from_string will be ignored.
                 Defaults to None.
+            type_converter (type[TypeConverter] | None, optional): A TypeConverter class
+                to apply whenever a new value is set. If None will not convert.
+                Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save value(s) in. If None, will
                 create numerical slot keys starting from 0. Otherwise, number of slots
                 must match number of values, unless number of values is 1 (:= same value
                 for all slots). Defaults to None.
         """
-        super().__init__(None)
+        super().__init__(OptionSlotValue)
 
         self.key = key
+        self._type_converter = (
+            (lambda x: x) if type_converter is None else type_converter
+        )
 
         # verifying slots
         if slots is None:
@@ -136,9 +161,33 @@ class Option(_SlotEntity[OptionValue]):
             raise ValueError("Number of slots must match number of values.")
 
         for slot, value in zip(slots, values):
-            self._slots.set_slots(
-                create_missing_slots=True, value=value, slots=slot
-            )
+            self._set_slots(create_missing_slots=True, value=value, slots=slot)
+
+    def _set_slots(
+        self,
+        value: OptionValue | OptionSlotValue,
+        create_missing_slots=False,
+        *,
+        slots: SlotAccess = None,
+    ) -> None:
+        """Set the content of specified slots.
+
+        Args:
+            value (OptionValue | OptionSlotValue): New value for the slots.
+            create_missing_slots (bool, optional): Whether to create slots that are
+                specified but don't exist in the entity. Defaults to False.
+            slots (SlotAccess, optional): Slots to set. Defaults to None.
+        """
+        value = value.input if isinstance(value, OptionSlotValue) else value
+
+        def slot_value():
+            return OptionSlotValue(input=value, converted=self._type_converter(value))
+
+        return super()._set_slots(
+            value=slot_value,
+            create_missing_slots=create_missing_slots,
+            slots=slots,
+        )
 
     def to_string(self, delimiter: str, *, slots: SlotAccess = None) -> str:
         """Convert the Option into an ini string.
@@ -162,7 +211,11 @@ class Option(_SlotEntity[OptionValue]):
 
     @classmethod
     def from_string(
-        cls, string: str, delimiter: Delimiter, *, slots: SlotAccess = None
+        cls,
+        string: str,
+        delimiter: Delimiter | tuple[Delimiter, ...],
+        *,
+        slots: SlotAccess = None,
     ) -> Self:
         """Create an Option from a string.
 
@@ -195,6 +248,17 @@ class Option(_SlotEntity[OptionValue]):
             return cls(key=last_key[0], values=lr[1].strip() or None, slots=slots)
 
         raise ExtractionError("Option could not be extracted.")
+
+    def add_continuation(self, continuation: str, *, slots: SlotAccess) -> None:
+        slots = self._slots.slot_access(slots)
+        for slot in slots:
+            _input = self._slots[slot].input
+            if not isinstance(_input, list):
+                _input = [_input]
+            _input.append(continuation)
+            converted = [self._type_converter(i) for i in _input]
+            self._slots[slot].converted = converted
+            self._slots[slot].input = _input
 
 
 class CommentGroup(list[Comment]):

@@ -1,6 +1,7 @@
 from typing import Literal
 import re
 from .entities import Option, Comment
+from .type_converters.converters import TypeConverter, DEFAULT_GUESS_CONVERTER
 
 
 class Parameters:
@@ -22,6 +23,7 @@ class Parameters:
         ) = (),
         ignore_whitespace_lines: bool = True,
         read_undefined: bool | Literal["section", "option"] = False,
+        type_converter: type[TypeConverter] | None = DEFAULT_GUESS_CONVERTER,
     ) -> None:
         """
         Args:
@@ -60,6 +62,10 @@ class Parameters:
                 "option" will read undefined options within defined sections but
                 not undefined sections and their content. If False, will ignore
                 undefined content. Defaults to False.
+            type_converter (type[TypeConverter] | None, optional): TypeConverter class
+                to apply to every option value (and continuation) that is not annotated
+                otherwise. If None, will save all values (and continuations) as strings.
+                Defaults to smartini.type_converters.DEFAULT_GUESS_CONVERTER.
         """
         # because comment_prefixes and option_delimiters check each other on setting
         self._comment_prefixes = ()
@@ -73,6 +79,7 @@ class Parameters:
         self.multiline_ignore = multiline_ignore
         self.ignore_whitespace_lines = ignore_whitespace_lines
         self.read_undefined = read_undefined
+        self.type_converter = type_converter
 
     @property
     def entity_delimiter(self) -> str:

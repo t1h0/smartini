@@ -1,7 +1,7 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
-from typing import Any, Literal, Self, Callable, overload
+from typing import Any, Literal, Self, Callable, overload, get_type_hints, get_args
 import re
 from pathlib import Path
 import warnings
@@ -20,6 +20,7 @@ from .entities import (
     CommentGroup,
     Option,
     OptionValue,
+    OptionSlotValue,
     SectionName,
     UndefinedOption,
 )
@@ -40,6 +41,7 @@ from .globals import (
     INTERNAL_PREFIX_IN_WORDS,
 )
 from .utils import _str_to_var, OrderedDict, copy_doc
+from .type_converters import converters
 
 
 class SectionMeta(type):
@@ -71,9 +73,13 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     # name of the section if actual section name differs from class variable
     _name: str | None
 
-    def __init__(self) -> None:
+    def __init__(
+        self, default_type_converter: type[converters.TypeConverter] | None = None
+    ) -> None:
 
         super().__init__()
+
+        type_hints = get_type_hints(self)
 
         # initialize Options
         for var, val in vars(self.__class__).items():
@@ -89,8 +95,21 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                         f"'{var}' is interpreted as an Option but Option variable names"
                         f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
                     )
-                option = Option(key=val)
-                super().__setattr__(var, Option(key=val))
+                type_converter = None
+                if var in type_hints:
+                    # get annotated type converter
+                    type_converter = next(
+                        (
+                            anno
+                            for anno in get_args(type_hints[var])
+                            if issubclass(anno, converters.TypeConverter)
+                        ),
+                        None,
+                    )
+                if type_converter is None:
+                    type_converter = default_type_converter
+                option = Option(key=val, type_converter=type_converter)
+                super().__setattr__(var, option)
                 self._schema_structure.append(option)
 
     @overload
@@ -384,7 +403,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                 ) from ee
 
         # set option value
-        option._set_slots(value=value, slots=slots, add_missing_slots=True)
+        option._set_slots(value=value, slots=slots, create_missing_slots=True)
 
         # set structure position
         self._set_structure_items(
@@ -550,7 +569,9 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         # initialize Sections
         for var, val in vars(self.__class__).items():
             if isinstance(val, SectionMeta):
-                section = val()
+                section = val(
+                    default_type_converter=self._default_parameters.type_converter
+                )
                 super().__setattr__(var, section)
                 self._schema_structure.append(section)
 
@@ -1212,13 +1233,7 @@ class _ReadIni:
             slot (SlotAccess): Slot to add the continuation to.
         """
         # add continuation to last option
-        last_option._apply_to_slots(
-            lambda val: (
-                [*val, continuation] if isinstance(val, list) else [val, continuation]
-            ),
-            inplace=True,
-            slots=slots,
-        )
+        last_option.add_continuation(continuation=continuation, slots=slots)
 
     @classmethod
     def _is_empty_entity(cls, entity: str, parameters: Parameters) -> bool:
@@ -1325,7 +1340,7 @@ class SlotDecider(SlotView):
         target, attr = super().__getattribute__("_get_target_attr")(name)
 
         if isinstance(attr, Option):
-            return super().__getattribute__("_decide_slot")(attr)[1]
+            return super().__getattribute__("_decide_slot")(attr)[1].converted
         elif isinstance(attr, Section):
             return SlotDecider(
                 attr,
@@ -1349,7 +1364,7 @@ class SlotDecider(SlotView):
 
     def _decide_slot(self, target: Option | Section) -> tuple[
         SlotKey,
-        OptionValue | Structure,
+        OptionSlotValue | Structure,
     ]:
         """Decides, which slot to access using the defined decider method.
 
@@ -1357,7 +1372,7 @@ class SlotDecider(SlotView):
             target (Option | Section): The Option or Section that is to be accessed.
 
         Returns:
-            tuple[SlotKey, OptionValue | SectionStructure]: Tuple of the target's
+            tuple[SlotKey, OptionSlotValue | SectionStructure]: Tuple of the target's
                 decided slot's key and value.
 
         """
@@ -1376,7 +1391,7 @@ class SlotDecider(SlotView):
         method: SlotDeciderMethods,
     ) -> tuple[
         SlotKey,
-        OptionValue | Structure,
+        OptionSlotValue | Structure,
     ]:
         """Decides, which slot to access using the passed decider method and the passed
         reference slots.
@@ -1387,7 +1402,7 @@ class SlotDecider(SlotView):
             method (SlotDeciderMethods): The method to use for decision making.
 
         Returns:
-            tuple[SlotKey, OptionValue | SectionStructure]: Tuple of the target's
+            tuple[SlotKey, OptionSlotValue | SectionStructure]: Tuple of the target's
                 decided slot's key and value.
 
         """
@@ -1453,7 +1468,10 @@ class SlotViewer(SlotView):
         # Schema[].Section.Option
         elif isinstance(attr, Option):
             assert isinstance(target, Section)
-            return attr[slot]
+            out = attr[slot]
+            if isinstance(out, list):
+                return [val.converted for val in out]
+            return out.converted
 
         # Schema[].Section.(SlotAccess)
         elif callable(attr):

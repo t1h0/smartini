@@ -118,7 +118,7 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
 
     def set_slots(
         self,
-        value: SlotValue,
+        values: SlotValue | list[SlotValue] | Callable[[], SlotValue],
         create_missing_slots=False,
         *,
         slots: SlotAccess = None,
@@ -126,12 +126,33 @@ class Slots(OrderedDict[SlotKey, SlotValue]):
         """Set the content of specified slots.
 
         Args:
-            value (SlotValue): New value all slots should take.
-            slots (SlotAccess, optional): Slots to set. Defaults to None.
+            values (SlotValue | list[SlotValue] | Callable[[],SlotValue]): New values,
+                one per slot. If Callable, will call it len(slots) times and assign
+                the return values accordingly.
             create_missing_slots (bool, optional): Whether to create slots that are
                 specified but don't exist in the entity. Defaults to False.
+            slots (SlotAccess, optional): Slots to set. Defaults to None.
         """
-        for slot in self.slot_access(slots):
+        slots = self.slot_access(slots)
+
+        # verify values
+        if callable(values):
+            values_per_slot = [values() for _ in range(len(slots))]
+        elif not isinstance(values, list):
+            values_per_slot = [values]
+        else:
+            values_per_slot = values
+
+        # check if we have one value per slot
+        if len(slots) != len(values_per_slot):
+            if len(slots) != 1:
+                raise ValueError(
+                    f"Number of values ({len(values_per_slot)}) doesn't match number of slots ({len(slots)})."
+                )
+            # one slot, interpret the list as one value for the slot
+            values_per_slot = [values_per_slot]
+
+        for slot, value in zip(self.slot_access(slots), values_per_slot):
             if slot not in self:
                 if not create_missing_slots:
                     raise IndexError(
@@ -185,7 +206,7 @@ class _SlotEntity[SlotValue]:
 
     def _set_slots(
         self,
-        value: SlotValue,
+        value: Callable[[], SlotValue],
         create_missing_slots=False,
         *,
         slots: SlotAccess = None,
@@ -193,14 +214,14 @@ class _SlotEntity[SlotValue]:
         """Set the content of specified slots.
 
         Args:
-            value (SlotValue): New value all slots should take.
-            slots (SlotAccess, optional): Slots to set. Defaults to None.
+            value (Callable[[], SlotValue]): Will call len(slots) times and assign the
+                return values accordingly.
             create_missing_slots (bool, optional): Whether to create slots that are
                 specified but don't exist in the entity. Defaults to False.
-            **kwargs: Keyword-arguments to set, corresponding to entity slot attributes.
+            slots (SlotAccess, optional): Slots to set. Defaults to None.
         """
         return self._slots.set_slots(
-            value=value,
+            values=value,
             create_missing_slots=create_missing_slots,
             slots=slots,
         )
@@ -213,9 +234,6 @@ class _SlotEntity[SlotValue]:
 
     def __getitem__(self, slots: SlotAccess) -> list[SlotValue] | SlotValue:
         return self._slots[slots]
-
-    def __setitem__(self, slots: SlotAccess, value: Any) -> None:
-        self._slots.set_slots(value=value, slots=slots)
 
     def _get_slots(self, slots: SlotAccess, default: Any = None) -> Any:
         try:
@@ -464,9 +482,10 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
             raise IniStructureError(
                 "Entities of new structure must all belong to section."
             )
+        slots = self._slots.slot_access(slots)
         self._set_slots(
             create_missing_slots=create_missing_slots,
-            value=Structure(new_structure),
+            value=lambda: Structure(new_structure),
             slots=slots,
         )
 
