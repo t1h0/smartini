@@ -5,7 +5,6 @@ from typing import Any, Literal, Self, Callable, overload, get_type_hints, get_a
 import re
 from pathlib import Path
 import warnings
-import inspect
 import contextlib
 from charset_normalizer import from_bytes as read_from_bytes
 from .exceptions import (
@@ -1280,9 +1279,7 @@ class SlotView:
                 SlotAccess argument to self._slot.
         """
         access_kwargs = [
-            k
-            for k, v in inspect.get_annotations(access_target).items()
-            if v == SlotAccess
+            k for k, v in get_type_hints(access_target).items() if v == SlotAccess
         ]
 
         def accessor_func(*args, **kwargs):
@@ -1354,7 +1351,7 @@ class SlotDecider(SlotView):
         elif (
             not name.startswith("__")
             and callable(attr)
-            and SlotAccess in inspect.get_annotations(attr).values()
+            and SlotAccess in get_type_hints(attr).values()
         ):
             slot_key = super().__getattribute__("_decide_slot")(target)[0]
             return super().__getattribute__("_slot_access")(attr, slot_key)
