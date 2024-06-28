@@ -567,9 +567,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         # initialize Sections
         for var, val in vars(self.__class__).items():
             if isinstance(val, SectionMeta):
-                section = val(
-                    default_type_converter=self._default_parameters.type_converter
-                )
+                section = val(parameters=parameters)
                 super().__setattr__(var, section)
                 self._schema_structure.append(section)
 
