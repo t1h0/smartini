@@ -1,7 +1,14 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
-from typing import Any, Literal, Self, Callable, overload, get_type_hints, get_args
+from typing import (
+    Any,
+    Literal,
+    Self,
+    Callable,
+    overload,
+    get_type_hints,
+)
 import re
 from pathlib import Path
 import warnings
@@ -40,7 +47,7 @@ from .globals import (
     INTERNAL_PREFIX_IN_WORDS,
 )
 from .utils import _str_to_var, OrderedDict, copy_doc
-from .type_converters import converters
+from .type_converters.type_hints import _resolve_TYPE
 
 
 class SectionMeta(type):
@@ -92,19 +99,13 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                         f"'{var}' is interpreted as an Option but Option variable names"
                         f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
                     )
-                type_converter = None
+
+                # set type_converter for the option
+                type_converter = parameters.type_converter
                 if var in type_hints:
-                    # get annotated type converter
-                    type_converter = next(
-                        (
-                            anno
-                            for anno in get_args(type_hints[var])
-                            if issubclass(anno, converters.TypeConverter)
-                        ),
-                        None,
-                    )
-                if type_converter is None:
-                    type_converter = parameters.type_converter
+                    type_converter = _resolve_TYPE(type_hints[var])
+
+                # create option and add to Section
                 option = Option(key=val, type_converter=type_converter)
                 super().__setattr__(var, option)
                 self._schema_structure.append(option)

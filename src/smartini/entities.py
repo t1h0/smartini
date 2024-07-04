@@ -205,7 +205,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         """
         slots = self._slots.slot_access(slots)
         value = next(
-            (val for slot in slots if (val := self._slots[slot]) is not None), ""
+            (str(val) for slot in slots if (val := self._slots[slot]) is not None), ""
         )
         return f"{self.key} {delimiter} {value}"
 
