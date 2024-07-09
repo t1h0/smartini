@@ -1,13 +1,11 @@
 """Ini entities are either a section name, an option or a comment."""
 
-from typing import overload, Any, Self, TypeVar
+from typing import overload, Any, Self
 from dataclasses import dataclass
 import re
 from .exceptions import ExtractionError
 from .slots import SlotAccess, _SlotEntity
 from .type_converters.converters import TypeConverter
-
-T = TypeVar("T")
 
 
 class Comment:

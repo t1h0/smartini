@@ -86,38 +86,58 @@ class Section:
         """
 
     @overload
-    @classmethod
     def _get_options(
-        cls,
+        self,
         include_undefined: Literal[False] = ...,
-        *,
-        slots: int | str | list[int | str] = ...,
-    ) -> OrderedDict[str, Option]: ...
-    @overload
-    @classmethod
-    def _get_options(
-        cls,
-        include_undefined: bool | Literal["only"] = True,
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Option]: ...
     @overload
-    @classmethod
+    def _get_options(
+        self,
+        include_undefined: Literal[True] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Option | UndefinedOption]: ...
+    @overload
+    def _get_options(
+        self,
+        include_undefined: Literal["only"] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, UndefinedOption]: ...
+    @overload
     def get_options(
-        cls,
+        self,
         include_undefined: Literal[False] = ...,
         *,
-        slots: int | str | list[int | str] = ...,
+        slots: SlotAccess = None,
     ) -> OrderedDict[str, Option]: ...
     @overload
-    @classmethod
     def get_options(
-        cls,
+        self,
+        include_undefined: Literal[True] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Option | UndefinedOption]: ...
+    @overload
+    def get_options(
+        self,
+        include_undefined: Literal["only"] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, UndefinedOption]: ...
+    def get_options(
+        self,
         include_undefined: bool | Literal["only"] = True,
         *,
         slots: SlotAccess = None,
-    ) -> OrderedDict[str, Option]:
-        """Get options of the section.
+    ) -> (
+        OrderedDict[str, Option | UndefinedOption]
+        | OrderedDict[str, Option]
+        | OrderedDict[str, UndefinedOption]
+    ):
+        """Get the Section's options.
 
         Args:
             include_undefined (bool | "only", optional): Whether to include undefined
@@ -128,9 +148,11 @@ class Section:
                 Defaults to None.
 
         Returns:
-            OrderedDict[str, Option]: Variable names as keys and Options as values. Order
-                is that of the slot structure if len(slots) == 1. Otherwise, order matches
-                original schema structure with undefined options at the end.
+            OrderedDict[str, Option | UndefinedOption] | OrderedDict[str, Option]
+                | OrderedDict[str, UndefinedOption]: Variable names as keys and options as
+                values. Order is that of the slot structure if len(slots) == 1.
+                Otherwise, order matches original schema structure with undefined options
+                at the end.
         """
 
     @overload
@@ -262,34 +284,74 @@ class Schema:
             tuple[str, Section]: Tuple of variable name and section object.
         """
 
-    @classmethod
+    @overload
     def _get_sections(
-        cls,
-        include_undefined: bool = True,
+        self,
+        include_undefined: Literal[False] = ...,
         *,
-        slots: None = None,
+        slots: SlotAccess = None,
     ) -> OrderedDict[str, Section]: ...
-    @classmethod
-    def get_sections(
-        cls,
-        include_undefined: bool = True,
+    @overload
+    def _get_sections(
+        self,
+        include_undefined: Literal[True] = True,
         *,
-        slots: None = None,
-    ) -> OrderedDict[str, Section]:
-        """Get configuration section(s).
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section | UndefinedSection]: ...
+    @overload
+    def _get_sections(
+        self,
+        include_undefined: Literal["only"] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, UndefinedSection]: ...
+    @overload
+    def get_sections(
+        self,
+        include_undefined: Literal[False] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section]: ...
+    @overload
+    def get_sections(
+        self,
+        include_undefined: Literal[True] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, Section | UndefinedSection]: ...
+    @overload
+    def get_sections(
+        self,
+        include_undefined: Literal["only"] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, UndefinedSection]: ...
+    def get_sections(
+        self,
+        include_undefined: bool | Literal["only"] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> (
+        OrderedDict[str, Section | UndefinedSection]
+        | OrderedDict[str, Section]
+        | OrderedDict[str, UndefinedSection]
+    ):
+        """Get the Schemas's sections.
 
         Args:
-            include_undefined (bool, optional): Whether to also include undefined
-                sections. Defaults to True.
-            slots (SlotAccess, optional): Which slot(s) to get the sections from. If
-                multiple are given, will return the intersection. If None, will return
-                all. Defaults to None.
+            include_undefined (bool | "only", optional): Whether to include undefined
+                sections. If "only", will return only undefined sections. Always False
+                if slots is not None.
+            slots (SlotAccess, optional): Which slot(s) to get sections from. If multiple
+                are given, will return the intersection. If None will return all.
+                Defaults to None.
 
         Returns:
-            OrderedDict[str, Section]: Variable
-                names as keys and the Sections as values.  Order is that of the slot
-                structure if len(slots) == 1. Otherwise, order matches defined schema
-                structure with undefined sections at the end.
+            OrderedDict[str, Section | UndefinedSection] | OrderedDict[str, Section]
+                | OrderedDict[str, UndefinedSection]: Variable names as keys and sections
+                as values. Order is that of the slot structure if len(slots) == 1.
+                Otherwise, order matches original schema structure with undefined sections
+                at the end.
         """
 
     @classmethod

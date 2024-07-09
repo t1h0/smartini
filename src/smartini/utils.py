@@ -1,6 +1,6 @@
 import re
 from collections import OrderedDict as OD
-from typing import Any, TypeVar, Generic, overload, Iterable, ParamSpec, Callable
+from typing import Any, TypeVar, Generic, overload, Iterable, Callable
 from itertools import islice
 from .globals import INTERNAL_PREFIX, VARIABLE_PREFIX
 
@@ -19,13 +19,11 @@ def _str_to_var(string: str) -> str:
     )
 
 
-T = TypeVar("T")
-P = ParamSpec("P")
-
-
-def copy_doc(
-    doc_source: Callable[P, T], annotations: bool = False
-) -> Callable[[Callable[P, T]], Callable[P, T]]:
+def copy_doc[
+    **P, T
+](doc_source: Callable[P, T], annotations: bool = False) -> Callable[
+    [Callable[P, T]], Callable[P, T]
+]:
     """Decorator to copy the docstring of doc_source to another.
     Inspired by Trevor (stackoverflow.com/users/13905088/trevor)
     from: stackoverflow.com/questions/68901049/

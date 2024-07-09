@@ -2,7 +2,6 @@
 
 from typing import (
     Literal,
-    TypeVar,
     overload,
     Callable,
     Generator,
@@ -17,8 +16,6 @@ from .exceptions import (
     DuplicateEntityError,
 )
 
-T = TypeVar("T")
-
 type SlotDeciderMethods = Literal[
     "fallback", "first", "cascade up", "latest", "cascade down"
 ]
@@ -32,7 +29,6 @@ type SlotDeciderMethods = Literal[
     "cascade down": Uses first slot that is not None from latest to first.    
 """
 
-SlotValue = TypeVar("SlotValue")
 type SlotKey = int | str
 type SlotAccess = SlotKey | list[SlotKey] | None
 """Identifier for which slot(s) to access. int or str identifier for a single slot,
@@ -40,7 +36,7 @@ list[SlotKey] for multiple slots and None for all slots.
 """
 
 
-class Slots(OrderedDict[SlotKey, SlotValue]):
+class Slots[SlotValue](OrderedDict[SlotKey, SlotValue]):
     """Container for slots."""
 
     def __init__(self, value_type: type[SlotValue], *args, **kwargs) -> None:
@@ -242,7 +238,9 @@ class _SlotEntity[SlotValue]:
             return default
 
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[SlotValue], T],
         _id: None = ...,
@@ -251,7 +249,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> Generator[T, None, None]: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[int, SlotValue], T],
         _id: Literal["index"] = ...,
@@ -260,7 +260,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> Generator[T, None, None]: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[SlotKey, SlotValue], T],
         _id: Literal["key"] = ...,
@@ -269,7 +271,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> Generator[T, None, None]: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[SlotKey, int, SlotValue], T],
         _id: Literal["both"] = ...,
@@ -278,7 +282,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> Generator[T, None, None]: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[SlotValue], SlotValue],
         _id: None = ...,
@@ -287,7 +293,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> None: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[int, SlotValue], SlotValue],
         _id: Literal["index"] = ...,
@@ -296,7 +304,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> None: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[SlotKey, SlotValue], SlotValue],
         _id: Literal["key"] = ...,
@@ -305,7 +315,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> None: ...
     @overload
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: Callable[[SlotKey, int, SlotValue], SlotValue],
         _id: Literal["both"] = ...,
@@ -314,7 +326,9 @@ class _SlotEntity[SlotValue]:
         slots: SlotAccess = None,
     ) -> None: ...
 
-    def _apply_to_slots(
+    def _apply_to_slots[
+        T
+    ](
         self,
         func: (
             Callable[[SlotValue], T]
@@ -330,7 +344,7 @@ class _SlotEntity[SlotValue]:
         inplace=False,
         *,
         slots: SlotAccess = None,
-    ) -> Generator[T, None, None] | Generator[SlotValue, None, None] | None:
+    ) -> (Generator[T, None, None] | Generator[SlotValue, None, None] | None):
         """Apply function to slots.
 
         Args:
@@ -372,9 +386,6 @@ class _SlotEntity[SlotValue]:
             self._slots[key] = val
 
 
-StructureItem = TypeVar("StructureItem")
-
-
 class Structure[StructureItem](list[StructureItem]):
     """Structure saving the order of entities."""
 
@@ -400,6 +411,118 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
         self._schema_structure = Structure()
 
         super().__init__(Structure)
+
+    @overload
+    def _get_items[
+        DefinedItem, UndefinedItem
+    ](
+        self,
+        defined_item: type[DefinedItem],
+        undefined_item: type[UndefinedItem],
+        include_undefined: Literal[False] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, DefinedItem]: ...
+    @overload
+    def _get_items[
+        DefinedItem, UndefinedItem
+    ](
+        self,
+        defined_item: type[DefinedItem],
+        undefined_item: type[UndefinedItem],
+        include_undefined: Literal[True] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, DefinedItem | UndefinedItem]: ...
+    @overload
+    def _get_items[
+        DefinedItem, UndefinedItem
+    ](
+        self,
+        defined_item: type[DefinedItem],
+        undefined_item: type[UndefinedItem],
+        include_undefined: Literal["only"] = ...,
+        *,
+        slots: SlotAccess = None,
+    ) -> OrderedDict[str, UndefinedItem]: ...
+
+    def _get_items[
+        DefinedItem, UndefinedItem
+    ](
+        self,
+        defined_item: type[DefinedItem],
+        undefined_item: type[UndefinedItem],
+        include_undefined: bool | Literal["only"] = True,
+        *,
+        slots: SlotAccess = None,
+    ) -> (
+        OrderedDict[str, DefinedItem | UndefinedItem]
+        | OrderedDict[str, DefinedItem]
+        | OrderedDict[str, UndefinedItem]
+    ):
+        """Get items of the entity.
+
+        Args:
+            defined_item (type[DefinedItem]): Type of the defined item.
+            undefined_item (type[UndefinedItem]): Type of the undefined item.
+            include_undefined (bool | "only", optional): Whether to include undefined
+                items. If "only", will return only undefined items. Always False
+                if slots is not None.
+            slots (SlotAccess, optional): Which slot(s) to get items from. If multiple
+                are given, will return the intersection. If None will return all.
+                Defaults to None.
+
+        Returns:
+            OrderedDict[str, DefinedItem | UndefinedItem] | OrderedDict[str, DefinedItem]
+                | OrderedDict[str, UndefinedItem]: Variable names as keys and items as
+                values. Order is that of the slot structure if len(slots) == 1.
+                Otherwise, order matches original schema structure with undefined items
+                at the end.
+        """
+        valid_item = (
+            (lambda x: isinstance(x, undefined_item))
+            if include_undefined == "only"
+            else (
+                (lambda x: isinstance(x, defined_item))
+                if include_undefined
+                else (
+                    lambda x: isinstance(x, defined_item)
+                    and not isinstance(x, undefined_item)
+                )
+            )
+        )
+
+        if slots is None:
+            return OrderedDict(
+                {name: var for name, var in vars(self).items() if valid_item(var)}
+            )
+
+        slots_access = self._slots.slot_access(slots)
+
+        if len(slots_access) == 1:
+            # return items in order of slot structure
+            return OrderedDict(
+                {
+                    k: v
+                    for item in self._slots[slots_access][0]
+                    if valid_item(item)
+                    for k, v in vars(self).items()
+                    if v == item
+                }
+            )
+
+        items_intersection = {
+            item for slot in self._slots[slots_access] for item in slot
+        }
+
+        # return items in order of original schema structure
+        return OrderedDict(
+            {
+                name: var
+                for name, var in vars(self).items()
+                if valid_item(var) and var in items_intersection
+            }
+        )
 
     def _set_structure_items(
         self,
