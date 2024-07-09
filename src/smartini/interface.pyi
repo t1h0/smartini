@@ -312,13 +312,13 @@ class Schema:
         slots: SlotAccess | Literal[False] = False,
         **kwargs,
     ) -> None:
-        """Read an ini file. If no parameters are passed (as Parameters object or kwargs),
+        """Read an INI file. If no parameters are passed (as Parameters object or kwargs),
         default parameters defined on initialization will be used.
 
         Args:
-            path (str | Path): Path to the ini file.
+            path (str | Path): Path to the INI file.
             parameters (Parameters | None, optional): Parameters for reading and
-                writing inis, as a Parameters object. Parameters can also be passed
+                writing INIs, as a Parameters object. Parameters can also be passed
                 as kwargs. Missing parameters (because parameters is None and no or not
                 enough kwargs are passed) will be taken from default parameters that
                 were defined on initialization. Defaults to None.

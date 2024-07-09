@@ -15,13 +15,20 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
   - [Using the configurations in your code](#using-the-configurations-in-your-code)
 - [Advanced Usage](#advanced-usage)
   - [Multiple configurations using *slots*](#multiple-configurations-using-slots)
-    - [Introductionary example](#introductionary-example)
+    - [Introduction](#introduction)
     - [Basic concept](#basic-concept)
       - [Slot keys](#slot-keys)
     - [Accessing and setting slots](#accessing-and-setting-slots)
       - [Automatically](#automatically)
       - [Manually](#manually)
-    - [Example solution](#example-solution)
+    - [Introduction solution](#introduction-solution)
+  - [Type hinting and type conversion](#type-hinting-and-type-conversion)
+    - [Introduction](#introduction-1)
+    - [Basic concept](#basic-concept-1)
+    - [Built-in `TypeConverters`](#built-in-typeconverters)
+    - [Creating your own `TypeConverter`](#creating-your-own-typeconverter)
+    - [Assigning `TypeConverters` via type hinting](#assigning-typeconverters-via-type-hinting)
+    - [Introduction solution](#introduction-solution-1)
   - [Custom markers](#custom-markers)
   - [Multiline options](#multiline-options)
   - [Undefined configurations](#undefined-configurations)
@@ -49,6 +56,27 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
   - [smartini.**SectionName**](#smartinisectionname)
   - [smartini.**SlotAccess**](#smartinislotaccess)
   - [smartini.**SlotDeciderMethods**](#smartinislotdecidermethods)
+  - [smartini.**TYPE**](#smartinitype)
+  - [smartini.**type\_converters**](#smartinitype_converters)
+    - [smartini.type\_converters.**converters**](#smartinitype_convertersconverters)
+      - [smartini.type\_converters.converters.**bool\_converter**](#smartinitype_convertersconvertersbool_converter)
+      - [smartini.type\_converters.converters.**ConvertibleTypes**](#smartinitype_convertersconvertersconvertibletypes)
+      - [smartini.type\_converters.converters.**DEFAULT\_BOOL\_CONVERTER**](#smartinitype_convertersconvertersdefault_bool_converter)
+      - [smartini.type\_converters.converters.**DEFAULT\_LIST\_CONVERTER**](#smartinitype_convertersconvertersdefault_list_converter)
+      - [smartini.type\_converters.converters.**DEFAULT\_NUMERIC\_CONVERTER**](#smartinitype_convertersconvertersdefault_numeric_converter)
+      - [smartini.type\_converters.converters.**DEFAULT\_GUESS\_CONVERTER**](#smartinitype_convertersconvertersdefault_guess_converter)
+      - [smartini.type\_converters.converters.**guess\_converter**](#smartinitype_convertersconvertersguess_converter)
+      - [smartini.type\_converters.converters.**list\_converter**](#smartinitype_convertersconverterslist_converter)
+      - [smartini.type\_converters.converters.**new\_converter**](#smartinitype_convertersconvertersnew_converter)
+      - [smartini.type\_converters.converters.**numeric\_converter**](#smartinitype_convertersconvertersnumeric_converter)
+      - [smartini.type\_converters.converters.**TypeConverter**](#smartinitype_convertersconverterstypeconverter)
+      - [smartini.type\_converters.converters.**WrongType**](#smartinitype_convertersconverterswrongtype)
+    - [smartini.type\_converters.**type\_hints**](#smartinitype_converterstype_hints)
+      - [smartini.type\_converters.type\_hints.**BOOL**](#smartinitype_converterstype_hintsbool)
+      - [smartini.type\_converters.type\_hints.**GUESS**](#smartinitype_converterstype_hintsguess)
+      - [smartini.type\_converters.type\_hints.**LIST**](#smartinitype_converterstype_hintslist)
+      - [smartini.type\_converters.type\_hints.**NUMERIC**](#smartinitype_converterstype_hintsnumeric)
+      - [smartini.type\_converters.type\_hints.**STR**](#smartinitype_converterstype_hintsstr)
   - [smartini.**UndefinedOption**](#smartiniundefinedoption)
 - [Why still ini?](#why-still-ini)
 - [Contributing](#contributing)
@@ -124,7 +152,7 @@ You can now use the stored configurations by simply accessing them through your 
 
 ```python
 >>> config.Crawler.interval
-'30'
+30
 >>> config.Mailer.receiver
 'emma@geller-greene.com'
 ```
@@ -139,15 +167,14 @@ Similarly, you can assign new values to existing configurations:
 >>> config.Crawler.receiver
 'rachel@geller-greene.com'
 ```
-> As you can see, all values are currently read from file as strings, whereas assignment won't change the type. In future releases, numerical values, lists etc. will be read as their respective types from file as well.
 
 # Advanced Usage
 
 ## Multiple configurations using *slots*
 
-### Introductionary example
+### Introduction
 
-Imagine you send your news crawler (from the example above) to your dad and they configure it like so:
+Imagine you send your news crawler (from the [documentation's introduction](#setting-up-a-configuration-file)) to your dad and they configure it like so:
 
 ```ini
 [News Crawler]
@@ -204,7 +231,7 @@ config[0].Crawler.interval
 config.iloc[0].Crawler.interval
 ```
 
-### Example solution
+### Introduction solution
 
 So how does this help us with our initial problem? Easy!
 
@@ -218,9 +245,9 @@ So how does this help us with our initial problem? Easy!
 
     ```python
     >>> config.Crawler.interval
-    '30'
+    30
     >>> config["default"].Crawler.interval
-    '30'
+    30
     >>> config["dad"].Crawler.interval
     >>> None
     ```
@@ -234,6 +261,140 @@ So how does this help us with our initial problem? Easy!
     >>> config.Crawler.source
     'paleantologytoday.com'
     ```
+
+## Type hinting and type conversion
+
+By default, SmartIni tries to guess the type of each option value and return it in the respective type or fallback to string representation. However, you can change that behavior for all options or each option individually.
+
+### Introduction
+
+Let's assume you add more Mailer settings to your news crawler (from the [documentation's introduction](#setting-up-a-configuration-file)) like so:
+
+```ini
+[Mailer]
+; Settings for the mailer
+
+; mail address to send to
+news-receiver = ross@geller-greene.com
+
+; Whether the Mail should have a greeting in the beginning.
+; + for yes, - for no.
+welcome = +
+
+; Time of the day the mail should be sent in 24h format.
+time = 15
+
+; Days of the week the mail should be sent.
+days = mon, wed, fri
+```
+
+By default, `news-receiver`, `welcome`, `time` and `days` will be read as `str`, `str`, `int` and `list[str]`, respectively. However, those types are either wrong (in the case of `welcome`) or can be misleading depending on the input. That's where SmartIni's type converters come into play!
+
+### Basic concept
+
+Smartini's type conversion is based on its [`TypeConverters`](#smartinitype_convertersconverterstypeconverter). Each option's assigned `TypeConverter` is applied on its value with the conversion result saved separately. `TypeConverters` always return the unchanged input if they can't convert it. Thus, if conversion is not successful, converted value and input string are equal.
+
+By default, SmartIni assigns the [default Guess-TypeConverter](#smartinitype_convertersconvertersdefault_guess_converter) to each option. This `TypeConverter` tries to match the value to one of the [`ConvertibleTypes`](#smartinitype_convertersconvertersconvertibletypes). You can change the default `TypeConverter` to one of the other [built-in `TypeConverters`](#built-in-typeconverters), to [your own `TypeConverter`](#creating-your-own-typeconverter) or disable default type conversion all along by setting the respective [parameter](#smartiniparameters) during [Schema initialization](#smartinischema).
+
+
+You can also define a specific type - and thus a specific type converter - separately for one or more options using [simple python typing](#assigning-typeconverters-via-type-hinting). This can be helpful to ensure each option is of correct type or if your ini differs from SmartIni's default conversion behavior.
+
+### Built-in `TypeConverters`
+
+SmartIni comes with the following [built-in `TypeConverters`](#smartinitype_convertersconverters), that can be used with their default arguments or customized using the respective creator functions:
+
+- **Guess-TypeConverter**
+
+    [`type_converters.DEFAULT_GUESS_CONVERTER`](#smartinitype_convertersconvertersdefault_guess_converter)
+    
+    [`type_converters.guess_converter()`](#smartinitype_convertersconvertersguess_converter)
+
+- **Bool-TypeConverter**
+
+    [`type_converters.DEFAULT_BOOL_CONVERTER`](#smartinitype_convertersconvertersdefault_bool_converter)
+    
+    [`type_converters.bool_converter()`](#smartinitype_convertersconvertersbool_converter)
+
+- **Numeric-TypeConverter**
+
+    [`type_converters.DEFAULT_NUMERIC_CONVERTER`](#smartinitype_convertersconvertersdefault_numeric_converter)
+    
+    [`type_converters.numeric_converter()`](#smartinitype_convertersconvertersnumeric_converter)
+
+- **List-TypeConverter**
+
+    [`type_converters.DEFAULT_LIST_CONVERTER`](#smartinitype_convertersconvertersdefault_list_converter)
+    
+    [`type_converters.list_converter()`](#smartinitype_convertersconverterslist_converter)
+
+### Creating your own `TypeConverter`
+
+You can also create your own [`TypeConverter`](#smartinitype_convertersconverterstypeconverter) by passing a `Callable` to [`type_converters.new_converter`](#smartinitype_convertersconvertersnew_converter). The Callable takes a `str` as input and returns the converted value or raises [`type_converters.WrongType`](#smartinitype_convertersconverterswrongtype) if conversion was unsuccessful. 
+
+### Assigning `TypeConverters` via type hinting
+
+You can set an option's type and thus its [`TypeConverter`](#smartinitype_convertersconverterstypeconverter) by annotating it in your [`Schema`](#smartinischema) definition using [`smartini.TYPE[]`](#smartinitype) in one of the following ways:
+
+- `TYPE` | `TYPE[]` | `TYPE[`[`DEFAULT_GUESS_CONVERTER`](#smartinitype_convertersconvertersdefault_guess_converter)`]`
+    
+    Assigns the [`Guess-TypeConverter`](#smartinitype_convertersconvertersguess_converter).
+
+- `TYPE[type[`[`ConvertibleTypes`](#smartinitype_convertersconvertersconvertibletypes)`]]`
+
+    Assigns a `TypeConverter` matching the type. E.g. `TYPE[int]` will assign a [`Numeric-TypeConverter`](#smartinitype_convertersconvertersdefault_numeric_converter) that converts to `int`.
+
+- `TYPE[type[TypeConverter]]`
+
+    Assigns the annotated `TypeConverter` (e.g. your own).
+
+Alternatively, SmartIni also comes with [pre-defined type hints](#smartinitype_converterstype_hints) for its built-in `TypeConverters`.
+
+### Introduction solution
+
+Let's look at our Mailer options again. We want `welcome` to be represented as a boolean and we might want `time` to be represented as a `datetime.time` object. Here's how we can do it:
+
+1. Create a [boolean converter](#smartinitype_convertersconvertersbool_converter) that interprets `"+"` as `True` and `"-"` as `False`.
+
+    ```python
+    from smartini.type_converters.converters import bool_converter
+    
+    bool_type = bool_converter(true="+", false="-")
+    ```
+2. Create a custom converter that converts a value to a `datetime.time` object.
+
+    ```python
+    from smartini.type_converters.converters import new_converter, WrongType
+    from datetime import time
+
+    def convert_to_time(string:str) -> time:
+        try:
+            return time(int(string))
+        except ValueError:
+            raise WrongType
+    
+    time_type = new_converter(convert_to_time)
+    ```
+3. Assign both converters respectively.
+
+    ```python
+    from smartini import Schema, Section, TYPE
+    from smartini.type_converters.type_hints import STR
+
+    class Config(Schema):
+
+        ...
+
+        class Mailer(Section):
+            receiver: STR = "news-receiver"
+            welcome: TYPE[bool_type] = "welcome"
+            time: TYPE[time_type] = "time"
+            days: TYPE[list[str]] = "days"
+
+    ```
+
+    > Note:
+    > - The type annotations for `receiver` and `days` are not really necessary here as SmartIni already guesses the correct types.
+    > - For `list` type annotations, SmartIni will guess each list item's type if no item type annotation is provided in brackets.
 
 ## Custom markers
 
@@ -328,7 +489,7 @@ Convert the Comment into an ini string.
 Option object holding an option's value (per slot) and key.
 
 ```python
-Option(key, values = None, slots = None)
+Option(key, values = None, type_converter = None, slots = None)
 ```    
 
 **Args**
@@ -340,6 +501,10 @@ Option(key, values = None, slots = None)
 - **values** (`Any | list[Any] | None`, optional)
 
     The option value or values (one value per slot or one/same value for all slots). Should be `None` if `from_string` is provided, otherwise `from_string` will be ignored. Defaults to `None`.
+
+- **type_converter** (`type[`[`TypeConverter`](#smartinitype_convertersconverterstypeconverter)` | `[`ConvertibleTypes`](#smartinitype_convertersconvertersconvertibletypes)`] | None`, optional)
+
+    TypeConverter to apply to every option value (and continuation) that is not explicitly annotated. Alternatively one of the `ConvertibleTypes` that the option values should be interpreted as (will be matched to a `TypeConverter`). If `None`, will save all values (and continuations) as strings. Defaults to [`DEFAULT_GUESS_CONVERTER`](#smartinitype_convertersconvertersdefault_guess_converter).
 
 - **slots** (`SlotAccess`, optional)
 
@@ -382,7 +547,7 @@ Convert the Option into an ini string.
 Parameters for reading and writing.
 
 ```python
-Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False)
+Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False, type_converter = smartini.type_converters.DEFAULT_GUESS_CONVERTER)
 ```
 
 **Args**
@@ -418,7 +583,11 @@ Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_d
 
 - **read_undefined** (`bool | "section" | "option"`, optional)
     
-    Whether undefined content should be read and stored. If `True`, will read every undefined content. If `"section"`, will read undefined sections and their content but not undefined options within defined sections. `"option"` will read undefinied options within defined sections but not undefined sections and their content. If `False`, will ignore undefined content. Defaults to `False`.
+    Whether undefined content should be read and stored. If `True`, will read every undefined content. If `"section"`, will read undefined sections and their content but not undefined options within defined sections. `"option"` will read undefined options within defined sections but not undefined sections and their content. If `False`, will ignore undefined content. Defaults to `False`.
+
+- **type_converter** (`type[`[`TypeConverter`](#smartinitype_convertersconverterstypeconverter)`] | None`, optional):
+
+    `TypeConverter` class to apply to every option value (and continuation) that is not annotated otherwise. If `None`, will save all values (and continuations) as strings. Defaults to `smartini.type_converters.DEFAULT_GUESS_CONVERTER`.    
 
 ## smartini.**Schema**
 
@@ -527,17 +696,17 @@ Get configuration section(s).
 Schema.read_ini(path, parameters = None, parameters_as_default = False, *, slots = False, **kwargs)
 ```
    
-Read an ini file. If no parameters are passed (as [`Parameters`](#smartiniparameters) object or kwargs), default parameters defined on initialization will be used.
+Read an INI file. If no parameters are passed (as [`Parameters`](#smartiniparameters) object or kwargs), default parameters defined on initialization will be used.
 
 **Args**
 
 - **path** (`str | pathlib.Path`)
 
-    Path to the ini file.
+    Path to the INI file.
 
 - **parameters** ([`Parameters`](#smartiniparameters)`| None`, optional)
 
-    Parameters for reading and writing inis, as a `Parameters` object. `Parameters` can also be passed as kwargs. Missing parameters (because parameters is `None` and no or not enough kwargs are passed) will be taken from default parameters that were defined on initialization. Defaults to `None`.
+    Parameters for reading and writing INIs, as a `Parameters` object. `Parameters` can also be passed as kwargs. Missing parameters (because parameters is `None` and no or not enough kwargs are passed) will be taken from default parameters that were defined on initialization. Defaults to `None`.
 
 - **parameters_as_default** (`bool`, optional)
 
@@ -648,7 +817,7 @@ Get an option by variable name or option key.
 
 **Returns**
 
-- `Option`
+- [`Option`](#smartinioption)
 
     The requested option.
 
@@ -769,6 +938,242 @@ Method to decide which slot to use.
 - `"cascade down"`
 
     Uses first slot that is not `None` from latest to first.
+
+## smartini.**TYPE**
+
+Type annotation for type converters. All types passed in brackets will be tried for conversion, first successful conversion will be applied.
+
+**Example**:
+
+```python
+option_1: TYPE[int,bool] = "option-1"
+```
+
+SmartIni will try to convert into `int` first, then into `bool`, then interpret as `str`.
+
+## smartini.**type_converters**
+
+SmartIni's type conversion logic.
+
+### smartini.type_converters.**converters**
+
+Converter classes and functions.
+
+#### smartini.type_converters.converters.**bool_converter**
+
+```python
+type_converters.bool_converter(true = ("1", "true", "yes", "y"), false = ("0", "false", "no", "n"))
+```
+
+Create a new `bool` converter.
+
+**Args**
+
+- **true** (`str | tuple[str, ...]`, optional)
+
+    String(s) that should be regarded as `True`. Defaults to `("1", "true", "yes", "y")`.
+- **false** (`str | tuple[str, ...]`, optional)
+
+    String(s) that should be regarded as `False`. Defaults to `("0", "false", "no", "n")`.
+
+**Returns**
+
+- `type[TypeConverter[bool]]`
+
+    The `bool` type converter.
+
+#### smartini.type_converters.converters.**ConvertibleTypes**
+
+```python
+ConvertibleTypes = int | float | complex | bool | list
+```
+
+Types that SmartIni can convert the input strings into.
+
+> Note: SmartIni also allows for annotating the item type of a `list`, e.g. `list[int]`.
+
+#### smartini.type_converters.converters.**DEFAULT_BOOL_CONVERTER**
+
+```python
+DEFAULT_BOOL_CONVERTER = smartini.type_converters.bool_converter()
+```
+
+[Bool converter](#smartinitype_convertersconvertersbool_converter) with default conversion parameters.
+
+#### smartini.type_converters.converters.**DEFAULT_LIST_CONVERTER**
+
+```python
+DEFAULT_LIST_CONVERTER = smartini.type_converters.list_converter()
+```
+
+[List converter](#smartinitype_convertersconverterslist_converter) with default conversion parameters.
+
+#### smartini.type_converters.converters.**DEFAULT_NUMERIC_CONVERTER**
+
+```python
+DEFAULT_NUMERIC_CONVERTER = smartini.type_converters.numeric_converter()
+```
+
+[Numeric converter](#smartinitype_convertersconvertersnumeric_converter) with default conversion parameters.
+
+#### smartini.type_converters.converters.**DEFAULT_GUESS_CONVERTER**
+
+```python
+DEFAULT_GUESS_CONVERTER = smartini.type_converters.guess_converter()
+```
+
+[Guess converter](#smartinitype_convertersconvertersguess_converter) with default conversion parameters.
+
+#### smartini.type_converters.converters.**guess_converter**
+
+```python
+type_converters.guess_converter(*types)
+```
+
+Create a new type converter that guesses the type.
+
+**Args**
+- **\*types** (`type`)
+
+    The types to guess. If not provided, will guess all of [`type_converters.ConvertibleTypes`](#smartinitype_convertersconvertersconvertibletypes).
+
+**Returns**
+
+- `type[`[`TypeConverter`](#smartinitype_convertersconverterstypeconverter)`]`
+
+    The new Guess-TypeConverter.
+
+#### smartini.type_converters.converters.**list_converter**
+
+```python
+type_converters.list_converter(delimiter = ",", remove_whitespace = True, item_converter = None)
+```
+
+Create a new `list` type converter.
+
+**Args**
+    
+- **delimiter** (`str`, optional)
+
+    Delimiter that separates list items. Defaults to `","`.
+
+- **remove_whitespace** (`bool`, optional)
+
+    Whether whitespace between items and delimiter should be removed. Defaults to `True`.
+
+- **item_converter** (`type[TypeConverter[Any]]`)
+
+    [`TypeConverter`](#smartinitype_convertersconverterstypeconverter) to convert each list item with. If `None`, will use [Guess-TypeConverter](#smartinitype_convertersconvertersguess_converter). Defaults to `None`.
+
+**Returns**
+
+- `type[TypeConverter[list]]`
+
+    The new `list` type converter.
+
+#### smartini.type_converters.converters.**new_converter**
+
+```python
+type_converters.new_converter(processor, name = None)
+```
+
+Create a new [TypeConverter](#smartinitype_convertersconverterstypeconverter).
+
+**Args**
+
+- **processor** (`Callable[[str], T]`)
+
+    Callable to process the string input and convert it into an instance of arbitrary type. If conversion is not possible, should raise [WrongType](#smartinitype_convertersconverterswrongtype).
+
+- **name** (`str | None`, optional)
+
+    Name for the new [`TypeConverter`](#smartinitype_convertersconverterstypeconverter). Will be appended to result into `TypeConverter_{name}`. If `None`, will take the processor function's name. Defaults to `None`.
+
+**Returns**
+
+- `type[TypeConverter[T]]`
+
+    [`TypeConverter`](#smartinitype_convertersconverterstypeconverter) that will return the processed input on call or the input itself if conversion was not possible.
+
+#### smartini.type_converters.converters.**numeric_converter**
+
+```python
+type_converters.numeric_converter(numeric_type = (int, float, complex), decimal_sep = ".", thousands_sep = ",")
+```
+
+Create a new numeric type converter.
+
+**Args**
+
+- **numeric_type** (`type[int | float | complex] | tuple[type[int | float | complex], ...]`, optional)
+
+    The type to convert to. If multiple are given, the type converter will return the first type that the conversion was successful for. Defaults to `(int, float, complex)`.
+
+- **decimal_sep** (`str`, optional)
+
+    Possible decimal separator inside the string. Defaults to `"."`.
+
+- **thousands_sep** (`str`, optional)
+
+    Possible thousands separator inside the string. Defaults to `","`.
+
+**Returns**
+
+* `type[TypeConverter[int | float | complex]]`
+
+    The numeric type converter.
+
+#### smartini.type_converters.converters.**TypeConverter**
+
+Parent class for type converters. To create a type converter, use [`new_converter()`](#smartinitype_convertersconvertersnew_converter).    
+
+#### smartini.type_converters.converters.**WrongType**
+
+Exception. Raised when a value could not be converted.
+
+### smartini.type_converters.**type_hints**
+
+Pre-defined type hints for built-in type converters.
+
+#### smartini.type_converters.type_hints.**BOOL**
+
+```python
+BOOL = TYPE[DEFAULT_BOOL_CONVERTER]
+```
+
+Boolean type converter.
+
+#### smartini.type_converters.type_hints.**GUESS**
+
+```python
+GUESS = TYPE[DEFAULT_GUESS_CONVERTER]
+```
+
+Type converter that will guess the type.
+
+#### smartini.type_converters.type_hints.**LIST**
+
+```python
+LIST = TYPE[DEFAULT_LIST_CONVERTER]
+```
+
+List type converter.
+
+#### smartini.type_converters.type_hints.**NUMERIC**
+
+```python
+STR = TYPE[str]
+```
+
+Annotation for a string option value.
+
+#### smartini.type_converters.type_hints.**STR**
+
+```python
+NUMERIC = TYPE[DEFAULT_NUMERIC_CONVERTER]
+```
+
+Numeric type converter.
 
 ## smartini.**UndefinedOption**
 
