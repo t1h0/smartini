@@ -7,10 +7,12 @@ from typing import (
 )
 import re
 import contextlib
-from urllib import parse as urlparse
-from .exceptions import WrongType
+from .exceptions import WrongType # leave even if unused
 
-type ScalarTypes = int | float | complex | bool | urlparse.ParseResult
+type ScalarTypes = int | float | complex | bool
+"""Possible scalar conversion result types."""
+type ConvertibleTypes = ScalarTypes | list
+"""Possible conversion result types."""
 
 
 class TypeConverter[ConvertedType]:
@@ -22,8 +24,7 @@ class TypeConverter[ConvertedType]:
 def new_converter[
     T
 ](processor: Callable[[str], T], name: str | None = None) -> type[TypeConverter[T]]:
-
-    def converter(cls, value: Any) -> T | Any:
+    def convert(cls, value: Any) -> T | Any:
         if isinstance(value, str):
             with contextlib.suppress(WrongType):
                 return processor(value)
@@ -32,7 +33,7 @@ def new_converter[
     return type(
         f"TypeConverter_{processor.__name__ if name is None else name}",
         (TypeConverter,),
-        {"__new__": converter},
+        {"__new__": convert},
     )
 
 
@@ -97,37 +98,25 @@ def numeric_converter[
     return new_converter(to_num)
 
 
-def url_converter() -> type[TypeConverter[urlparse.ParseResult]]:
-
-    def to_url(string: str) -> urlparse.ParseResult:
-        if (url := urlparse.urlparse(string)).hostname:
-            return url
-        raise WrongType
-
-    return new_converter(to_url)
-
-
 @overload
 def list_converter[
     T
 ](
     delimiter: str = ",",
-    ignore_whitespace: bool = True,
+    remove_whitespace: bool = True,
     item_converter: type[TypeConverter[T]] = ...,
 ) -> type[TypeConverter[list[T | Any]]]: ...
 @overload
-def list_converter[
-    T
-](
+def list_converter(
     delimiter: str = ",",
-    ignore_whitespace: bool = True,
+    remove_whitespace: bool = True,
     item_converter: None = None,
 ) -> type[TypeConverter[list[ScalarTypes | Any]]]: ...
 def list_converter[
     T
 ](
     delimiter: str = ",",
-    ignore_whitespace: bool = True,
+    remove_whitespace: bool = True,
     item_converter: type[TypeConverter[T]] | None = None,
 ) -> type[TypeConverter[list[T | Any] | list[ScalarTypes | Any]]]:
 
@@ -135,7 +124,7 @@ def list_converter[
         item_converter = guess_converter(*get_args(ScalarTypes.__value__))
 
     split_delimiter = (
-        rf"\s*{re.escape(delimiter)}\s*" if ignore_whitespace else delimiter
+        rf"\s*{re.escape(delimiter)}\s*" if remove_whitespace else delimiter
     )
 
     def to_list(string: str) -> list[T | str] | list[ScalarTypes | str]:
@@ -149,14 +138,10 @@ def list_converter[
 
 
 def guess_converter(
-    *types: type,
+    *types: type[Any | TypeConverter],
 ) -> type[TypeConverter]:
 
     if types:
-        converters = tuple(
-            t if issubclass(t, TypeConverter) else _type_hint_to_converter(t)
-            for t in types
-        )
         name = "guess_" + "_".join(
             (
                 postfix[0]
@@ -171,9 +156,8 @@ def guess_converter(
         )
     else:
         converters = (
-            DEFAULT_BOOL_CONVERTER,
             DEFAULT_NUMERIC_CONVERTER,
-            DEFAULT_URL_CONVERTER,
+            DEFAULT_BOOL_CONVERTER,
             DEFAULT_LIST_CONVERTER,
         )
         name = None
@@ -193,25 +177,34 @@ def _type_hint_to_converter[
 ](type_hint: type[T],) -> type[TypeConverter[T]]: ...
 @overload
 def _type_hint_to_converter[
+    T: TypeConverter
+](type_hint: type[T],) -> type[T] | None: ...
+@overload
+def _type_hint_to_converter[
     T: Any
 ](type_hint: type[T],) -> type[TypeConverter[T]] | None: ...
 def _type_hint_to_converter[
     T
-](type_hint: type[T],) -> type[TypeConverter[T]] | None:
+](type_hint: type[T],) -> type[TypeConverter[T]] | type[T] | None:
+    """Convert a type to its respective TypeConverter.
 
-    if origin := get_origin(type_hint):
+    Args:
+        type_hint (type): The type to convert.
 
-        if origin is list:
+    Returns:
+        type[TypeConverter] | None: The matching TypeConvert or None if type is not
+            convertible.
+    """
+    if issubclass(type_hint, TypeConverter):
+        return type_hint
+    if (origin := get_origin(type_hint)) and origin is list:
 
-            if (list_args := get_args(type_hint)) and len(list_args) == 1:
-                # list has exactly one type hint -> get item converter
-                item_converter = _type_hint_to_converter(list_args[0])
-                return list_converter(item_converter=item_converter)
+        if (list_args := get_args(type_hint)) and len(list_args) == 1:
+            # list has exactly one type hint -> get item converter
+            item_converter = _type_hint_to_converter(list_args[0])
+            return list_converter(item_converter=item_converter)
 
-            return DEFAULT_LIST_CONVERTER
-
-        else:
-            raise ValueError(f"Invalid type hint '{type_hint}'.")
+        return DEFAULT_LIST_CONVERTER
 
     if type_hint in {int, float, complex}:
         return numeric_converter(numeric_type=type_hint)
@@ -227,6 +220,5 @@ def _type_hint_to_converter[
 
 DEFAULT_BOOL_CONVERTER = bool_converter()
 DEFAULT_NUMERIC_CONVERTER = numeric_converter()
-DEFAULT_URL_CONVERTER = url_converter()
 DEFAULT_LIST_CONVERTER = list_converter()
 DEFAULT_GUESS_CONVERTER = guess_converter()

@@ -48,6 +48,7 @@ from .globals import (
 )
 from .utils import _str_to_var, OrderedDict, copy_doc
 from .type_converters.type_hints import _resolve_TYPE
+from .type_converters.converters import _type_hint_to_converter
 
 
 class SectionMeta(type):
@@ -80,10 +81,16 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     _name: str | None
 
     def __init__(self, parameters: Parameters) -> None:
+        """
+        Args:
+            parameters (Parameters): Ini read and write parameters. Will be automatically
+            passed by Schema.
+        """
 
         super().__init__()
 
         type_hints = get_type_hints(self)
+        default_type_converter = _type_hint_to_converter(parameters.type_converter)
 
         # initialize Options
         for var, val in vars(self.__class__).items():
@@ -100,13 +107,15 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                         f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
                     )
 
-                # set type_converter for the option
-                type_converter = parameters.type_converter
-                if var in type_hints:
-                    type_converter = _resolve_TYPE(type_hints[var])
-
                 # create option and add to Section
-                option = Option(key=val, type_converter=type_converter)
+                option = Option(
+                    key=val,
+                    type_converter=(
+                        _resolve_TYPE(type_hints[var])
+                        if var in type_hints
+                        else default_type_converter
+                    ),
+                )
                 super().__setattr__(var, option)
                 self._schema_structure.append(option)
 
