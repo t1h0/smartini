@@ -158,7 +158,6 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             UndefinedOption | Comment: The newly created entity.
         """
         if isinstance(entity, Option):
-
             # make sure option key doesn't exist already
             with contextlib.suppress(EntityNotFound):
                 self._get_option(key=entity.key)
@@ -1081,7 +1080,10 @@ class _ReadIni:
         """
         try:
             return Option.from_string(
-                string=line, delimiter=parameters.option_delimiters, slots=slots
+                string=line,
+                delimiter=parameters.option_delimiters,
+                type_converter=_type_hint_to_converter(parameters.type_converter),
+                slots=slots,
             )
         except ExtractionError:
             return None

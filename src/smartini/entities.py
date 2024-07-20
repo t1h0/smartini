@@ -212,6 +212,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         cls,
         string: str,
         delimiter: Delimiter | tuple[Delimiter, ...],
+        type_converter: type[TypeConverter] | None = None,
         *,
         slots: SlotAccess = None,
     ) -> Self:
@@ -220,6 +221,8 @@ class Option(_SlotEntity[OptionSlotValue]):
         Args:
             string (str): The string that contains the option key and value.
             delimiter (Delimiter): The delimiter that separates key and value.
+            type_converter (type[TypeConverter] | None, optional): A TypeConverter class
+                to apply whenever. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save the value in. Defaults to None.
 
         Returns:
@@ -243,7 +246,12 @@ class Option(_SlotEntity[OptionSlotValue]):
             and (last_key := re.search(r"\b([\w\.\-\_]+)\b$", lr[0].strip()))
         ):
             # taking last word of left side as key
-            return cls(key=last_key[0], values=lr[1].strip() or None, slots=slots)
+            return cls(
+                key=last_key[0],
+                values=lr[1].strip() or None,
+                type_converter=type_converter,
+                slots=slots,
+            )
 
         raise ExtractionError("Option could not be extracted.")
 
@@ -285,7 +293,11 @@ class UndefinedOption(Option):
         # convert Option to UndefinedOption if provided
         if len(args) == 1 and not kwargs and isinstance(option := args[0], Option):
             args = ()
-            kwargs = {"key": option.key, "values": list(option._slots.values())}
+            kwargs = {
+                "key": option.key,
+                "values": list(option._slots.values()),
+                "type_converter": option._type_converter,
+            }
 
         super().__init__(*args, **kwargs)
 
