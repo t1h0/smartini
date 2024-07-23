@@ -165,6 +165,8 @@ def numeric_converter[
             if not re.fullmatch(rf"(?=.*{ds})(?!.*{ds}.*{ds}).*", string):
                 raise WrongType
             string = string.replace(decimal_sep, ".")
+        # remove whitespaces
+        string = string.replace(" ", "")
         for converter in numeric_type:
             with contextlib.suppress(ValueError):
                 return converter(string)
