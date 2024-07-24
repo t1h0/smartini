@@ -762,7 +762,6 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         # get markers
         option_delimiter = self._default_parameters.option_delimiters[0]
-        entity_delimiter = self._default_parameters.entity_delimiter
         comment_prefix = self._default_parameters.comment_prefixes[0]
 
         # define last variables
@@ -772,7 +771,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
             valid_option = lambda entity: isinstance(entity, Option) and not isinstance(
                 entity, UndefinedOption
             )
-        big_space: str = entity_delimiter * 2
+        big_space: str = "\n" * 2
 
         out = ""
 
@@ -793,12 +792,8 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 if valid_option(entity):
                     # add comments if requested
                     if comments is not None and entity in comments:
-                        out += (
-                            comments[entity]
-                            .iloc[0][1]
-                            .to_string(comment_prefix, entity_delimiter)
-                        )
-                        out += entity_delimiter
+                        out += comments[entity].iloc[0][1].to_string(comment_prefix)
+                        out += "\n"
 
                     # add option
                     out += entity.to_string(option_delimiter, slots=access)
@@ -806,11 +801,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
             if comments is not None and None in comments:
                 # add comments from end of the section
-                out += (
-                    comments[None]
-                    .iloc[0][1]
-                    .to_string(comment_prefix, entity_delimiter)
-                )
+                out += comments[None].iloc[0][1].to_string(comment_prefix)
                 out += big_space
 
         # remove last extra delimiters
@@ -870,10 +861,7 @@ class _ReadIni:
         file_content = str(read_from_bytes(Path(path).read_bytes()).best())
 
         # split into entities
-        entities = re.split(
-            self.parameters.entity_delimiter,
-            file_content,
-        )
+        entities = file_content.split("\n")
 
         # ----
         # define variables for read process

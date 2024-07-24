@@ -15,7 +15,6 @@ class Parameters:
 
     def __init__(
         self,
-        entity_delimiter: str | re.Pattern = re.compile("\n"),
         comment_prefixes: Comment.Prefix | tuple[Comment.Prefix, ...] = ";",
         option_delimiters: Option.Delimiter | tuple[Option.Delimiter, ...] = "=",
         multiline_allowed: bool = True,
@@ -35,8 +34,6 @@ class Parameters:
     ) -> None:
         """
         Args:
-            entity_delimiter (str | re.Pattern, optional): Delimiter that delimits
-                entities (section name, option, comment). Defaults to re.Pattern("\n").
             comment_prefixes (Comment.Prefix | tuple[Comment.Prefix,...], optional):
                 Prefix character(s) that denote a comment. If multiple are given,
                 the first will be taken for writing. "[" is not allowed. Defaults to ";".
@@ -81,7 +78,6 @@ class Parameters:
         self._comment_prefixes = ()
         self._option_delimiters = ()
 
-        self.entity_delimiter = entity_delimiter
         self.comment_prefixes = comment_prefixes
         self.option_delimiters = option_delimiters
         self.multiline_allowed = multiline_allowed
@@ -90,16 +86,6 @@ class Parameters:
         self.ignore_whitespace_lines = ignore_whitespace_lines
         self.read_undefined = read_undefined
         self.default_type_converter = default_type_converter
-
-    @property
-    def entity_delimiter(self) -> str:
-        return self._entity_delimiter
-
-    @entity_delimiter.setter
-    def entity_delimiter(self, value: str | re.Pattern) -> None:
-        self._entity_delimiter = (
-            value.pattern if isinstance(value, re.Pattern) else re.escape(value)
-        )
 
     @property
     def comment_prefixes(self) -> tuple[str, ...]:
