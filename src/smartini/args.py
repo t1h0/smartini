@@ -1,7 +1,13 @@
 from typing import Literal, Any
 import re
 from .entities import Option, Comment
-from .type_converters.converters import TypeConverter, DEFAULT_GUESS_CONVERTER, ConvertibleTypes
+from .type_converters.converters import (
+    TypeConverter,
+    DEFAULT_GUESS_CONVERTER,
+    DEFAULT_STRING_CONVERTER,
+    ConvertibleTypes,
+    _type_hint_to_converter,
+)
 
 
 class Parameters:
@@ -23,7 +29,9 @@ class Parameters:
         ) = (),
         ignore_whitespace_lines: bool = True,
         read_undefined: bool | Literal["section", "option"] = False,
-        type_converter: type[TypeConverter | ConvertibleTypes] | None = DEFAULT_GUESS_CONVERTER,
+        default_type_converter: (
+            type[TypeConverter | ConvertibleTypes] | None
+        ) = DEFAULT_GUESS_CONVERTER,
     ) -> None:
         """
         Args:
@@ -62,7 +70,7 @@ class Parameters:
                 "option" will read undefined options within defined sections but
                 not undefined sections and their content. If False, will ignore
                 undefined content. Defaults to False.
-            type_converter (type[TypeConverter | ConvertibleTypes] | None, optional):
+            default_type_converter (type[TypeConverter | ConvertibleTypes] | None, optional):
                 TypeConverter to apply to every option value (and continuation) that is
                 not explicitly annotated. Alternatively one of the ConvertibleTypes that
                 the respective option values should be interpreted as (will be matched
@@ -81,7 +89,7 @@ class Parameters:
         self.multiline_ignore = multiline_ignore
         self.ignore_whitespace_lines = ignore_whitespace_lines
         self.read_undefined = read_undefined
-        self.type_converter = type_converter
+        self.default_type_converter = default_type_converter
 
     @property
     def entity_delimiter(self) -> str:
@@ -173,6 +181,20 @@ class Parameters:
         ),
     ) -> None:
         self._multiline_ignore = () if value is None else value
+
+    @property
+    def default_type_converter(self) -> type[TypeConverter] | None:
+        return self._default_type_converter
+
+    @default_type_converter.setter
+    def default_type_converter(
+        self, value: type[TypeConverter | ConvertibleTypes] | None
+    ) -> None:
+        self._default_type_converter = (
+            DEFAULT_STRING_CONVERTER
+            if value is None
+            else _type_hint_to_converter(value)
+        )
 
     def update(self, **kwargs) -> None:
         """Update parameters with kwargs

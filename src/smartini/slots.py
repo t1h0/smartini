@@ -9,7 +9,7 @@ from typing import (
     Sequence,
 )
 from .utils import OrderedDict
-from .exceptions import (
+from .exceptions_warnings import (
     SlotNotFound,
     SlotAlreadyExists,
     IniStructureError,

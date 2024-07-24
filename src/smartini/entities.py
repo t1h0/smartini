@@ -3,7 +3,7 @@
 from typing import overload, Any, Self
 from dataclasses import dataclass
 import re
-from .exceptions import ExtractionError
+from .exceptions_warnings import ExtractionError
 from .slots import SlotAccess, _SlotEntity
 from .type_converters.converters import TypeConverter
 
@@ -139,9 +139,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         super().__init__(OptionSlotValue)
 
         self.key = key
-        self._type_converter = (
-            (lambda x: x) if type_converter is None else type_converter
-        )
+        self._type_converter = type_converter
 
         # verifying slots
         if slots is None:
@@ -176,10 +174,20 @@ class Option(_SlotEntity[OptionSlotValue]):
                 specified but don't exist in the entity. Defaults to False.
             slots (SlotAccess, optional): Slots to set. Defaults to None.
         """
-        value = value.input if isinstance(value, OptionSlotValue) else value
+        input_value = value.input if isinstance(value, OptionSlotValue) else value
+        converted_value = (
+            value.converted if isinstance(value, OptionSlotValue) else value
+        )
 
         def slot_value():
-            return OptionSlotValue(input=value, converted=self._type_converter(value))
+            return OptionSlotValue(
+                input=input_value,
+                converted=(
+                    self._type_converter(input_value)
+                    if self._type_converter
+                    else converted_value
+                ),
+            )
 
         return super()._set_slots(
             value=slot_value,
@@ -222,7 +230,7 @@ class Option(_SlotEntity[OptionSlotValue]):
             string (str): The string that contains the option key and value.
             delimiter (Delimiter): The delimiter that separates key and value.
             type_converter (type[TypeConverter] | None, optional): A TypeConverter class
-                to apply whenever. If None will not convert. Defaults to None.
+                to apply. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save the value in. Defaults to None.
 
         Returns:
@@ -255,14 +263,36 @@ class Option(_SlotEntity[OptionSlotValue]):
 
         raise ExtractionError("Option could not be extracted.")
 
-    def add_continuation(self, continuation: str, *, slots: SlotAccess) -> None:
+    def add_continuation(
+        self,
+        continuation: str,
+        type_converter: type[TypeConverter] | None = None,
+        *,
+        slots: SlotAccess,
+    ) -> None:
+        """Adds a continuation to the selected slots.
+
+        Args:
+            continuation (str): The continuation to add to the slot values.
+            type_converter (type[TypeConverter] | None, optional): The type converter
+                to use if self.type_converter is None. If None, will save as string in
+                the latter case. Defaults to None.
+            slots (SlotAccess): The slots to access.
+        """
         slots = self._slots.slot_access(slots)
         for slot in slots:
             _input = self._slots[slot].input
             if not isinstance(_input, list):
                 _input = [_input]
             _input.append(continuation)
-            converted = [self._type_converter(i) for i in _input]
+            converted = [
+                (
+                    self._type_converter(i)
+                    if self._type_converter
+                    else type_converter(i) if type_converter else i
+                )
+                for i in _input
+            ]
             self._slots[slot].converted = converted
             self._slots[slot].input = _input
 

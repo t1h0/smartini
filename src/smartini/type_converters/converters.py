@@ -336,6 +336,8 @@ def _type_hint_to_converter[
         return DEFAULT_BOOL_CONVERTER
     if type_hint is list:
         return DEFAULT_LIST_CONVERTER
+    if type_hint is str:
+        return DEFAULT_STRING_CONVERTER
 
     return None
 
@@ -349,3 +351,5 @@ DEFAULT_LIST_CONVERTER = list_converter()
 """List converter with default conversion parameters."""
 DEFAULT_GUESS_CONVERTER = guess_converter()
 """Guess converter with default conversion parameters."""
+DEFAULT_STRING_CONVERTER = new_converter(lambda x: x, "to_str")
+"""String "converter" to save values as they are."""

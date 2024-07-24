@@ -42,7 +42,9 @@ def _resolve_TYPE(type_hint: type) -> type[TypeConverter]:
         type[TypeConverter]: TypeConverter for the requested type(s).
     """
 
-    if not (origin := get_origin(type_hint)) or origin is not TYPE:
+    if (
+        not (origin := get_origin(type_hint)) or origin is not TYPE
+    ) and type_hint is not TYPE:
         raise ValueError(f"Invalid type hint '{type_hint}'.")
 
     # get type hints, and return guess converter based on the type hints

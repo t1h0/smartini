@@ -62,9 +62,9 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
       - [smartini.type\_converters.converters.**bool\_converter**](#smartinitype_convertersconvertersbool_converter)
       - [smartini.type\_converters.converters.**ConvertibleTypes**](#smartinitype_convertersconvertersconvertibletypes)
       - [smartini.type\_converters.converters.**DEFAULT\_BOOL\_CONVERTER**](#smartinitype_convertersconvertersdefault_bool_converter)
+      - [smartini.type\_converters.converters.**DEFAULT\_GUESS\_CONVERTER**](#smartinitype_convertersconvertersdefault_guess_converter)
       - [smartini.type\_converters.converters.**DEFAULT\_LIST\_CONVERTER**](#smartinitype_convertersconvertersdefault_list_converter)
       - [smartini.type\_converters.converters.**DEFAULT\_NUMERIC\_CONVERTER**](#smartinitype_convertersconvertersdefault_numeric_converter)
-      - [smartini.type\_converters.converters.**DEFAULT\_GUESS\_CONVERTER**](#smartinitype_convertersconvertersdefault_guess_converter)
       - [smartini.type\_converters.converters.**guess\_converter**](#smartinitype_convertersconvertersguess_converter)
       - [smartini.type\_converters.converters.**list\_converter**](#smartinitype_convertersconverterslist_converter)
       - [smartini.type\_converters.converters.**new\_converter**](#smartinitype_convertersconvertersnew_converter)
@@ -303,29 +303,12 @@ You can also define a specific type - and thus a specific type converter - separ
 
 SmartIni comes with the following [built-in `TypeConverters`](#smartinitype_convertersconverters), that can be used with their default arguments or customized using the respective creator functions:
 
-- **Guess-TypeConverter**
-
-    [`type_converters.DEFAULT_GUESS_CONVERTER`](#smartinitype_convertersconvertersdefault_guess_converter)
-    
-    [`type_converters.guess_converter()`](#smartinitype_convertersconvertersguess_converter)
-
-- **Bool-TypeConverter**
-
-    [`type_converters.DEFAULT_BOOL_CONVERTER`](#smartinitype_convertersconvertersdefault_bool_converter)
-    
-    [`type_converters.bool_converter()`](#smartinitype_convertersconvertersbool_converter)
-
-- **Numeric-TypeConverter**
-
-    [`type_converters.DEFAULT_NUMERIC_CONVERTER`](#smartinitype_convertersconvertersdefault_numeric_converter)
-    
-    [`type_converters.numeric_converter()`](#smartinitype_convertersconvertersnumeric_converter)
-
-- **List-TypeConverter**
-
-    [`type_converters.DEFAULT_LIST_CONVERTER`](#smartinitype_convertersconvertersdefault_list_converter)
-    
-    [`type_converters.list_converter()`](#smartinitype_convertersconverterslist_converter)
+| `TypeConverter` | Default                                                                                    | Creator function                                                             |
+| --------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| **Bool**        | [`DEFAULT_BOOL_CONVERTER`](#smartinitype_convertersconvertersdefault_bool_converter)       | [`bool_converter()`](#smartinitype_convertersconvertersbool_converter)       |
+| **Guess**       | [`DEFAULT_GUESS_CONVERTER`](#smartinitype_convertersconvertersdefault_guess_converter)     | [`guess_converter()`](#smartinitype_convertersconvertersguess_converter)     |
+| **List**        | [`DEFAULT_LIST_CONVERTER`](#smartinitype_convertersconvertersdefault_list_converter)       | [`list_converter()`](#smartinitype_convertersconverterslist_converter)       |
+| **Numeric**     | [`DEFAULT_NUMERIC_CONVERTER`](#smartinitype_convertersconvertersdefault_numeric_converter) | [`numeric_converter()`](#smartinitype_convertersconvertersnumeric_converter) |
 
 ### Creating your own `TypeConverter`
 
@@ -335,17 +318,12 @@ You can also create your own [`TypeConverter`](#smartinitype_convertersconverter
 
 You can set an option's type and thus its [`TypeConverter`](#smartinitype_convertersconverterstypeconverter) by annotating it in your [`Schema`](#smartinischema) definition using [`smartini.TYPE[]`](#smartinitype) in one of the following ways:
 
-- `TYPE` | `TYPE[]` | `TYPE[`[`DEFAULT_GUESS_CONVERTER`](#smartinitype_convertersconvertersdefault_guess_converter)`]`
-    
-    Assigns the [`Guess-TypeConverter`](#smartinitype_convertersconvertersguess_converter).
-
-- `TYPE[type[`[`ConvertibleTypes`](#smartinitype_convertersconvertersconvertibletypes)`]]`
-
-    Assigns a `TypeConverter` matching the type. E.g. `TYPE[int]` will assign a [`Numeric-TypeConverter`](#smartinitype_convertersconvertersdefault_numeric_converter) that converts to `int`.
-
-- `TYPE[type[TypeConverter]]`
-
-    Assigns the annotated `TypeConverter` (e.g. your own).
+| Type annotation                                                                          | Explanation                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TYPE` \| [`GUESS`](#smartinitype_converterstype_hintsguess)                             | Assigns the [`Guess-TypeConverter`](#smartinitype_convertersconvertersguess_converter).                                                                                                    |
+| [Pre-defined type hint](#smartinitype_converterstype_hints)                              | Assigns [built-in type converters](#built-in-typeconverters). E.g. [`BOOL`](#smartinitype_converterstype_hintsbool).                                                                       |
+| `TYPE[type[`[`ConvertibleTypes`](#smartinitype_convertersconvertersconvertibletypes)`]]` | Assigns a `TypeConverter` matching the type. E.g. `TYPE[int]` will assign a [`Numeric-TypeConverter`](#smartinitype_convertersconvertersdefault_numeric_converter) that converts to `int`. |
+| `TYPE[type[TypeConverter]]`                                                              | Assigns the annotated `TypeConverter` (e.g. your own).                                                                                                                                     |
 
 Alternatively, SmartIni also comes with [pre-defined type hints](#smartinitype_converterstype_hints) for its built-in `TypeConverters`.
 
@@ -400,15 +378,11 @@ Let's look at our Mailer options again. We want `welcome` to be represented as a
 
 SmartIni allows for customization of the following markers by passing the respective argument during [Schema initialization](#smartinischema):
 
-- **Entity delimiter**, `entity_delimiter`, default: `"\n"` (newline)
-
-    Separates entities from each other, e.g. `opt=val`**`\n`**`; comment`
-- **Option delimiter**, `option_delimiters`, default: `"="`
-
-    Separates option key from value, e.g. `opt`**`=`**`val`. You can pass multiple if the ini file is inconsistent.
-- **Comment prefix**, `comment_prefixes`, default: `";"`
-
-    Denotes a comment, e.g. **`;`**`comment`. You can pass multiple if the ini file is inconsistent.
+| Marker               | argument            | default          | Explanation                                                                                                     |
+| -------------------- | ------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Entity delimiter** | `entity_delimiter`  | `"\n"` (newline) | Separates entities from each other, e.g. `opt=val`**`\n`**`; comment`                                           |
+| **Option delimiter** | `option_delimiters` | `"="`            | Separates option key from value, e.g. `opt`**`=`**`val`. You can pass multiple if the ini file is inconsistent. |
+| **Comment prefix**   | `comment_prefixes`  | `";"`            | Denotes a comment, e.g. **`;`**`comment`. You can pass multiple if the ini file is inconsistent.                |
 
 > For further information see [Parameters](#smartiniparameters).
 
@@ -547,7 +521,7 @@ Convert the Option into an ini string.
 Parameters for reading and writing.
 
 ```python
-Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False, type_converter = smartini.type_converters.DEFAULT_GUESS_CONVERTER)
+Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False, default_type_converter = smartini.type_converters.DEFAULT_GUESS_CONVERTER)
 ```
 
 **Args**
@@ -585,7 +559,7 @@ Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_d
     
     Whether undefined content should be read and stored. If `True`, will read every undefined content. If `"section"`, will read undefined sections and their content but not undefined options within defined sections. `"option"` will read undefined options within defined sections but not undefined sections and their content. If `False`, will ignore undefined content. Defaults to `False`.
 
-- **type_converter** (`type[`[`TypeConverter`](#smartinitype_convertersconverterstypeconverter)`] | None`, optional):
+- **default_type_converter** (`type[`[`TypeConverter`](#smartinitype_convertersconverterstypeconverter)`] | None`, optional):
 
     `TypeConverter` class to apply to every option value (and continuation) that is not annotated otherwise. If `None`, will save all values (and continuations) as strings. Defaults to `smartini.type_converters.DEFAULT_GUESS_CONVERTER`.    
 
@@ -1000,6 +974,14 @@ DEFAULT_BOOL_CONVERTER = smartini.type_converters.bool_converter()
 
 [Bool converter](#smartinitype_convertersconvertersbool_converter) with default conversion parameters.
 
+#### smartini.type_converters.converters.**DEFAULT_GUESS_CONVERTER**
+
+```python
+DEFAULT_GUESS_CONVERTER = smartini.type_converters.guess_converter()
+```
+
+[Guess converter](#smartinitype_convertersconvertersguess_converter) with default conversion parameters.
+
 #### smartini.type_converters.converters.**DEFAULT_LIST_CONVERTER**
 
 ```python
@@ -1015,14 +997,6 @@ DEFAULT_NUMERIC_CONVERTER = smartini.type_converters.numeric_converter()
 ```
 
 [Numeric converter](#smartinitype_convertersconvertersnumeric_converter) with default conversion parameters.
-
-#### smartini.type_converters.converters.**DEFAULT_GUESS_CONVERTER**
-
-```python
-DEFAULT_GUESS_CONVERTER = smartini.type_converters.guess_converter()
-```
-
-[Guess converter](#smartinitype_convertersconvertersguess_converter) with default conversion parameters.
 
 #### smartini.type_converters.converters.**guess_converter**
 
