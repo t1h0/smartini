@@ -1,3 +1,4 @@
 # Python dependencies required for development
 charset-normalizer==3.3.2
 setuptools==70.1.0
+pytest
