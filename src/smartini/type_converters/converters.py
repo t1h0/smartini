@@ -253,7 +253,7 @@ def guess_converter(
 
     if types:
         # convert the types to guess into type converters
-        converters = tuple(_type_hint_to_converter(t) for t in types)
+        converters = tuple(_type_hint_to_converter(t) for t in types)  # type: ignore
         # set name for the converter
         name = "guess_" + "_".join(
             (
@@ -309,7 +309,7 @@ def _type_hint_to_converter[
 ](type_hint: type[T],) -> type[TypeConverter[T]] | None: ...
 def _type_hint_to_converter[
     T
-](type_hint: type[T],) -> type[TypeConverter[T]] | type[T] | None:
+](type_hint: type[T],) -> type[TypeConverter[T] | T] | None:
     """Convert a type to its respective TypeConverter.
 
     Args:
@@ -326,18 +326,18 @@ def _type_hint_to_converter[
         if (list_args := get_args(type_hint)) and len(list_args) == 1:
             # list has exactly one type hint -> get item converter
             item_converter = _type_hint_to_converter(list_args[0])
-            return list_converter(item_converter=item_converter)
+            return list_converter(item_converter=item_converter)  # type: ignore
 
-        return DEFAULT_LIST_CONVERTER
+        return DEFAULT_LIST_CONVERTER  # type: ignore
 
     if type_hint in {int, float, complex}:
-        return numeric_converter(numeric_type=type_hint)
+        return numeric_converter(numeric_type=type_hint)  # type: ignore
     if type_hint is bool:
-        return DEFAULT_BOOL_CONVERTER
+        return DEFAULT_BOOL_CONVERTER  # type: ignore
     if type_hint is list:
-        return DEFAULT_LIST_CONVERTER
+        return DEFAULT_LIST_CONVERTER  # type: ignore
     if type_hint is str:
-        return DEFAULT_STRING_CONVERTER
+        return DEFAULT_STRING_CONVERTER  # type: ignore
 
     return None
 

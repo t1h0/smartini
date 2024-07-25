@@ -6,13 +6,11 @@ import re
 from .exceptions_warnings import ExtractionError
 from .slots import SlotAccess, _SlotEntity
 from .type_converters.converters import TypeConverter
+from .globals import VALID_MARKERS
 
 
 class Comment:
     """Comment object holding a comment's content."""
-
-    type Prefix = str | re.Pattern
-    """Character(s) that prefix(es) a comment."""
 
     @overload
     def __init__(
@@ -25,14 +23,14 @@ class Comment:
     def __init__(
         self,
         content_without_prefix: None = ...,
-        prefix: Prefix | tuple[Prefix, ...] = ...,
+        prefix: VALID_MARKERS | tuple[VALID_MARKERS, ...] | None = ...,
         content_with_prefix: str = ...,
     ) -> None: ...
 
     def __init__(
         self,
         content_without_prefix: str | None = None,
-        prefix: Prefix | tuple[Prefix, ...] | None = None,
+        prefix: VALID_MARKERS | tuple[VALID_MARKERS, ...] | None = None,
         content_with_prefix: str | None = None,
     ) -> None:
         """
@@ -40,14 +38,14 @@ class Comment:
             content_without_prefix (str | None, optional): Content with prefix removed.
                 Should be None if content_with_prefix is provided, otherwise the latter
                 will be ignored. Defaults to None.
-            prefix (Prefix | tuple[Prefix, ...] | None, optional):
+            prefix (VALID_MARKERS | tuple[VALID_MARKERS, ...] | None, optional):
                 One or more prefixes that can denote the comment (used for
                 content_with_prefix). Defaults to None.
             content_with_prefix (str | None, optional): Content including prefix.
                 Will be ignored if content_without_prefix is provided. Defaults to None.
         """
-        if not isinstance(prefix, tuple):
-            prefix = (prefix if prefix is not None else "",)
+        if not isinstance(prefix, tuple) and prefix is not None:
+            prefix = (prefix,)
         assert isinstance(prefix, tuple)
 
         if content_without_prefix is not None:
@@ -55,9 +53,7 @@ class Comment:
             return
         elif content_with_prefix is not None:
             prefix_regex = (
-                rf"[{''.join(comment_prefix.pattern
-                if isinstance(comment_prefix,re.Pattern)
-                else re.escape(comment_prefix)
+                rf"[{''.join(re.escape(comment_prefix)
                 for comment_prefix in prefix)}]"
                 if prefix
                 else ""
@@ -108,9 +104,6 @@ class OptionSlotValue:
 
 class Option(_SlotEntity[OptionSlotValue]):
     """Option object holding an option's value (per slot) and key."""
-
-    type Delimiter = str | re.Pattern
-    """Character(s) that delimit(s) Option key from from value."""
 
     def __init__(
         self,
@@ -195,11 +188,11 @@ class Option(_SlotEntity[OptionSlotValue]):
             slots=slots,
         )
 
-    def to_string(self, delimiter: str, *, slots: SlotAccess = None) -> str:
+    def to_string(self, delimiter: VALID_MARKERS, *, slots: SlotAccess = None) -> str:
         """Convert the Option into an ini string.
 
         Args:
-            delimiter (str): The delimiter to use for separating option key
+            delimiter (VALID_MARKERS): The delimiter to use for separating option key
                 and value.
             slot (SlotAccess, optional): The slot to get the value from. If multiple are
                 passed, will take the first that is not None (or return an empty string
@@ -219,7 +212,7 @@ class Option(_SlotEntity[OptionSlotValue]):
     def from_string(
         cls,
         string: str,
-        delimiter: Delimiter | tuple[Delimiter, ...],
+        delimiter: VALID_MARKERS | tuple[VALID_MARKERS, ...],
         type_converter: type[TypeConverter] | None = None,
         *,
         slots: SlotAccess = None,
@@ -228,7 +221,8 @@ class Option(_SlotEntity[OptionSlotValue]):
 
         Args:
             string (str): The string that contains the option key and value.
-            delimiter (Delimiter): The delimiter that separates key and value.
+            delimiter (VALID_MARKERS | tuple[VALID_MARKERS, ...]): One or more
+                delimiters that can separates option key and value. Defaults to None.
             type_converter (type[TypeConverter] | None, optional): A TypeConverter class
                 to apply. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save the value in. Defaults to None.
@@ -300,17 +294,16 @@ class Option(_SlotEntity[OptionSlotValue]):
 class CommentGroup(list[Comment]):
     """Group of Comments."""
 
-    def to_string(self, prefix: str, entity_delimiter: str) -> str:
+    def to_string(self, prefix: str) -> str:
         """Convert group of Comments to one ini string.
 
         Args:
             prefix (str): Prefix for the comments
-            entity_delimiter (str): Entity delimiter to separate the comments.
 
         Returns:
             str: The Comments as one string.
         """
-        return entity_delimiter.join(comment.to_string(prefix) for comment in self)
+        return "\n".join(comment.to_string(prefix) for comment in self)
 
 
 class UndefinedOption(Option):

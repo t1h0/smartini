@@ -8,6 +8,7 @@ from .type_converters.converters import (
     ConvertibleTypes,
     _type_hint_to_converter,
 )
+from .globals import VALID_MARKERS
 
 
 class Parameters:
@@ -15,10 +16,10 @@ class Parameters:
 
     def __init__(
         self,
-        comment_prefixes: Comment.Prefix | tuple[Comment.Prefix, ...] = ";",
-        option_delimiters: Option.Delimiter | tuple[Option.Delimiter, ...] = "=",
+        comment_prefixes: VALID_MARKERS | tuple[VALID_MARKERS, ...] | None = ";",
+        option_delimiters: VALID_MARKERS | tuple[VALID_MARKERS, ...] = "=",
         multiline_allowed: bool = True,
-        multiline_prefix: str | re.Pattern | None = None,
+        multiline_prefix: VALID_MARKERS | Literal["\t"] | None = None,
         multiline_ignore: (
             tuple[
                 Literal["section_name", "option_delimiter", "comment_prefix"],
@@ -34,21 +35,21 @@ class Parameters:
     ) -> None:
         """
         Args:
-            comment_prefixes (Comment.Prefix | tuple[Comment.Prefix,...], optional):
-                Prefix character(s) that denote a comment. If multiple are given,
-                the first will be taken for writing. "[" is not allowed. Defaults to ";".
-            option_delimiters (Option.Delimiter | tuple[Option.Delimiter,...], optional):
+            comment_prefixes (VALID_MARKERS | tuple[VALID_MARKERS,...] | None,
+                optional): Prefix character(s) that denote a comment. If multiple are given,
+                the first will be taken for writing. If None, will treat every line as
+                comment that is not an option or section name. Defaults to ";".
+            option_delimiters (VALID_MARKERS | tuple[VALID_MARKERS,...], optional):
                 Delimiter character(s) that delimit option keys from values. If multiple
-                are given, the first will be taken for writing. "[" is not allowed.
-                Defaults to "=".
+                are given, the first will be taken for writing. Defaults to "=".
             multiline_allowed (bool, optional): Whether continuations of options
                 (i.e. multiline options) are allowed. If False, will throw a
                 ContinuationError for any continuation. Defaults to True.
-            multiline_prefix (str | re.Pattern | None, optional): Prefix to denote
-                continuations of multiline options. If set, will only accept
+            multiline_prefix (VALID_MARKERS | Literal["\t"] | None, optional): Prefix to
+                denote continuations of multiline options. If set, will only accept
                 continuations with that prefix (will throw a ContinuationError if that
-                prefix is missing). Defaults to None (possible continuation after one
-                entity delimiter).
+                prefix is missing). Defaults to None (possible continuation without
+                prefix).
             multiline_ignore (tuple["section_name" | "option_delimiter" |
                 "comment_prefix", ...] | None, optional): Entity identifier(s) to ignore
                 while continuing an option's value. Otherwise lines with those identifiers
@@ -88,65 +89,45 @@ class Parameters:
         self.default_type_converter = default_type_converter
 
     @property
-    def comment_prefixes(self) -> tuple[str, ...]:
+    def comment_prefixes(self) -> tuple[VALID_MARKERS, ...] | None:
         return self._comment_prefixes
 
     @comment_prefixes.setter
     def comment_prefixes(
-        self, value: Comment.Prefix | tuple[Comment.Prefix, ...]
+        self, value: VALID_MARKERS | tuple[VALID_MARKERS, ...] | None
     ) -> None:
-        if not isinstance(value, tuple):
-            value = (value,)
-        value = tuple(
-            val.pattern if isinstance(val, re.Pattern) else re.escape(val)
-            for val in value
-        )
-        if any(val.startswith(re.escape("[")) for val in value):
-            raise ValueError(
-                "'[' (section name identifier) is not allowed as a comment prefix."
-            )
-        if set(value).intersection(self.option_delimiters):
-            raise ValueError(
-                "Option delimiters and comment prefixes have to be distinct from another."
-            )
+        if value is not None:
+            if not isinstance(value, tuple):
+                value = (value,)
+            self.verify_marker(value, "comment prefix")
         self._comment_prefixes = value
+        self.verify_between_markers()
 
     @property
-    def option_delimiters(self) -> tuple[str, ...]:
+    def option_delimiters(self) -> tuple[VALID_MARKERS, ...]:
         return self._option_delimiters
 
     @option_delimiters.setter
     def option_delimiters(
-        self, value: Option.Delimiter | tuple[Option.Delimiter, ...]
+        self, value: VALID_MARKERS | tuple[VALID_MARKERS, ...]
     ) -> None:
         if not isinstance(value, tuple):
             value = (value,)
-        value = tuple(
-            val.pattern if isinstance(val, re.Pattern) else re.escape(val)
-            for val in value
-        )
-        if any(val.startswith(re.escape("[")) for val in value):
-            raise ValueError(
-                "'[' (section name identifier) is not allowed as an option delimiter."
-            )
-        if set(value).intersection(self.comment_prefixes):
-            raise ValueError(
-                "Option delimiters and comment prefixes have to be distinct from another."
-            )
+        self.verify_marker(value, "option delimiter")
         self._option_delimiters = value
+        self.verify_between_markers()
 
     @property
     def multiline_prefix(self) -> str:
         return self._multiline_prefix
 
     @multiline_prefix.setter
-    def multiline_prefix(self, value: str | re.Pattern | None) -> None:
+    def multiline_prefix(self, value: VALID_MARKERS | Literal["\t"] | None) -> None:
         if value is None:
             self._multiline_prefix = ""
-        elif isinstance(value, re.Pattern):
-            self._multiline_prefix = value.pattern
         else:
             self._multiline_prefix = re.escape(value)
+        self.verify_between_markers()
 
     @property
     def multiline_ignore(self) -> tuple[
@@ -181,6 +162,37 @@ class Parameters:
             if value is None
             else _type_hint_to_converter(value)
         )
+
+    def verify_marker(self, marker: tuple[str, ...], name: str) -> None:
+        for val in marker:
+            if val.startswith(re.escape("[")):
+                raise ValueError(
+                    f"'[' (section name identifier) is not allowed as a {name}."
+                )
+            if re.escape(",") in val:
+                raise ValueError(f"Comma is not allowed inside of a {name}.")
+
+    def verify_between_markers(self) -> None:
+        if hasattr(self, "comment_prefixes") and self.comment_prefixes:
+            cps = set(self.comment_prefixes)
+            if hasattr(self, "option_delimiters") and cps.intersection(
+                self.option_delimiters
+            ):
+                raise ValueError(
+                    "Comment prefixes and option delimiters have to be distinct from each other."
+                )
+            if hasattr(self, "multiline_prefix") and cps.intersection(
+                set(self.multiline_prefix)
+            ):
+                raise ValueError(
+                    "Comment prefixes and multiline prefix have to be distinct from each other."
+                )
+        if hasattr(self, "multiline_prefix") and set(
+            self.multiline_prefix
+        ).intersection(self.option_delimiters):
+            raise ValueError(
+                "Multiline prefix and option delimiters have to be distinct from each other."
+            )
 
     def update(self, **kwargs) -> None:
         """Update parameters with kwargs

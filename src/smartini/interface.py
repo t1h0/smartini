@@ -276,10 +276,10 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                 Otherwise, order matches original schema structure with undefined options
                 at the end.
         """
-        return self._get_items(
+        return self._get_items(  # type: ignore
             defined_item=Option,
             undefined_item=UndefinedOption,
-            include_undefined=include_undefined,
+            include_undefined=include_undefined,  # type: ignore
             slots=slots,
         )
 
@@ -521,7 +521,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         Args:
             parameters (Parameters | None, optional): Default parameters for reading and
-                writing inis, as a Parameters object. Parameters can also be passed
+                writing INIs, as a Parameters object. Parameters can also be passed
                 as kwargs. Missing parameters (because parameters is None and no or not
                 enough kwargs are passed) will be taken from default parameters
                 (see doc of Parameters). Defaults to None.
@@ -536,7 +536,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         if kwargs:
             parameters.update(**kwargs)
         self._default_parameters = parameters
-        self._decider_method = method
+        self._decider_method: SlotDeciderMethods = method
         self._slot_decider = SlotDecider(self, self._slots, method)
         self.iloc = SlotIlocViewer(self)
 
@@ -650,10 +650,10 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 Otherwise, order matches original schema structure with undefined sections
                 at the end.
         """
-        return self._get_items(
+        return self._get_items(  # type: ignore
             defined_item=Section,
             undefined_item=UndefinedSection,
-            include_undefined=include_undefined,
+            include_undefined=include_undefined,  # type: ignore
             slots=slots,
         )
 
@@ -762,7 +762,11 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         # get markers
         option_delimiter = self._default_parameters.option_delimiters[0]
-        comment_prefix = self._default_parameters.comment_prefixes[0]
+        comment_prefix = (
+            self._default_parameters.comment_prefixes[0]
+            if self._default_parameters.comment_prefixes
+            else None
+        )
 
         # define last variables
         if include_undefined:
@@ -775,8 +779,8 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         out = ""
 
-        for sec in self._get_sections(
-            include_undefined=include_undefined,
+        for sec in self._get_sections(  # type: ignore
+            include_undefined=include_undefined,  # type: ignore
             slots=None if structure == "schema" else access,
         ).values():
             comments = None
@@ -839,7 +843,7 @@ class _ReadIni:
         if kwargs:
             self.parameters.update(**kwargs)
         if parameters_as_default:
-            self.target._default_parameters = parameters
+            self.target._default_parameters = self.parameters
 
         if slots is False:
             # Generate new slot key
@@ -1049,6 +1053,7 @@ class _ReadIni:
                 if Option is undefined and to be ignored.
         """
         # check if Option is defined
+        assert isinstance(self.current_section, Section)
         try:
             option = self.current_section._get_option(key=extracted_option.key)
             option._set_slots(
@@ -1107,6 +1112,7 @@ class _ReadIni:
                 (as of now the input Comment object).
 
         """
+        assert isinstance(self.current_section, Section)
         self.current_section._add_entity(
             extracted_comment, positions=None, slots=self.slots
         )
@@ -1140,6 +1146,7 @@ class _ReadIni:
         """Handles a continuation (adds it to the last option)."""
         if self.possible_continuation:
             # add continuation to last option
+            assert isinstance(self.current_option, Option)
             self.current_option.add_continuation(
                 continuation=self.current_entity_content,
                 type_converter=self.parameters.default_type_converter,

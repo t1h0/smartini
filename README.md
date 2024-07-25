@@ -35,10 +35,8 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
 - [Documentation](#documentation)
   - [smartini.**Comment**](#smartinicomment)
     - [smartini.Comment.**content**](#smartinicommentcontent)
-    - [smartini.Comment.**Prefix**](#smartinicommentprefix)
     - [smartini.Comment.**to\_string**](#smartinicommentto_string)
   - [smartini.**Option**](#smartinioption)
-    - [smartini.Option.**Delimiter**](#smartinioptiondelimiter)
     - [smartini.Option.**to\_string**](#smartinioptionto_string)
   - [smartini.**Parameters**](#smartiniparameters)
   - [smartini.**Schema**](#smartinischema)
@@ -78,6 +76,7 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
       - [smartini.type\_converters.type\_hints.**NUMERIC**](#smartinitype_converterstype_hintsnumeric)
       - [smartini.type\_converters.type\_hints.**STR**](#smartinitype_converterstype_hintsstr)
   - [smartini.**UndefinedOption**](#smartiniundefinedoption)
+  - [smartini.**VALID\_MARKERS**](#smartinivalid_markers)
 - [Why still ini?](#why-still-ini)
 - [Contributing](#contributing)
 - [License](#license)
@@ -378,11 +377,10 @@ Let's look at our Mailer options again. We want `welcome` to be represented as a
 
 SmartIni allows for customization of the following markers by passing the respective argument during [Schema initialization](#smartinischema):
 
-| Marker               | argument            | default          | Explanation                                                                                                     |
-| -------------------- | ------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Entity delimiter** | `entity_delimiter`  | `"\n"` (newline) | Separates entities from each other, e.g. `opt=val`**`\n`**`; comment`                                           |
-| **Option delimiter** | `option_delimiters` | `"="`            | Separates option key from value, e.g. `opt`**`=`**`val`. You can pass multiple if the ini file is inconsistent. |
-| **Comment prefix**   | `comment_prefixes`  | `";"`            | Denotes a comment, e.g. **`;`**`comment`. You can pass multiple if the ini file is inconsistent.                |
+| Marker               | argument            | default | Explanation                                                                                                     |
+| -------------------- | ------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| **Option delimiter** | `option_delimiters` | `"="`   | Separates option key from value, e.g. `opt`**`=`**`val`. You can pass multiple if the ini file is inconsistent. |
+| **Comment prefix**   | `comment_prefixes`  | `";"`   | Denotes a comment, e.g. **`;`**`comment`. You can pass multiple if the ini file is inconsistent.                |
 
 > For further information see [Parameters](#smartiniparameters).
 
@@ -414,9 +412,9 @@ Comment(content_without_prefix = None, prefix = None, content_with_prefix = None
 
     Content with prefix removed. Should be `None` if `content_with_prefix` is provided, otherwise the latter will be ignored. Defaults to `None`.
 
-- **prefix** (`str | re.Pattern | tuple[str | re.Pattern, ...] | None`, optional)
+- **prefix** ([`VALID_MARKERS`](#smartinivalid_markers)` | tuple[VALID_MARKERS, ...] | None`, optional)
 
-    One or more prefixes that can denote the comment (used for `content_with_prefix`). Defaults to `None`.
+    One or more prefixes that can denote the comment (used for content_with_prefix). Defaults to `None`.
 
 - **content_with_prefix** (`str | None`, optional)
 
@@ -429,14 +427,6 @@ Comment.content
 ```
 
 The comment's content.
-
-### smartini.Comment.**Prefix**
-
-```python
-type Prefix = str | re.Pattern
-```
-
-Character(s) that prefix(es) a comment.
 
 ### smartini.Comment.**to_string**
 
@@ -484,14 +474,6 @@ Option(key, values = None, type_converter = None, slots = None)
 
     Slot(s) to save value(s) in. If `None`, will create numerical slot keys starting from `0`. Otherwise, number of slots must match number of values, unless number of values is `1` (:= same value for all slots). Defaults to `None`.
 
-### smartini.Option.**Delimiter**
-
-```python
-type Delimiter = str | re.Pattern
-```
-
-Character(s) that delimit(s) Option key from from value.
-
 ### smartini.Option.**to_string**
 
 ```python
@@ -502,7 +484,7 @@ Convert the Option into an ini string.
 
 **Args**
 
-- **delimiter** (`str`)
+- **delimiter** ([`VALID_MARKERS`](#smartinivalid_markers))
 
     The delimiter to use for separating option key and value.
 
@@ -521,30 +503,26 @@ Convert the Option into an ini string.
 Parameters for reading and writing.
 
 ```python
-Parameters(entity_delimiter = re.Pattern("\n"), comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False, default_type_converter = smartini.type_converters.DEFAULT_GUESS_CONVERTER)
+Parameters(comment_prefixes = ";", option_delimiters = "=", multiline_allowed = True, multiline_prefix = None, multiline_ignore = (), ignore_whitespace_lines = True, read_undefined = False, default_type_converter = smartini.type_converters.DEFAULT_GUESS_CONVERTER)
 ```
 
 **Args**
-    
-- **entity_delimiter** (`str | re.Pattern`, optional)
 
-    Delimiter that delimits entities (section name, option, comment). Defaults to `re.Pattern("\n")`.
+- **comment_prefixes** ([`VALID_MARKERS`](#smartinivalid_markers)`| tuple[VALID_MARKERS, ...]`, optional)
 
-- **comment_prefixes** ([`Comment.Prefix`](#smartinicommentprefix)`| tuple[Comment.Prefix, ...]`, optional)
+    Prefix character(s) that denote a comment. If multiple are given, the first will be taken for writing. If None, will treat every line as comment that is not an option or section name. Defaults to `";"`.
 
-    Prefix character(s) that denote a comment. If multiple are given, the first will be taken for writing. `"["` is not allowed. Defaults to `";"`.
+- **option_delimiters** ([`VALID_MARKERS`](#smartinivalid_markers)`| tuple[VALID_MARKERS, ...]`, optional)
 
-- **option_delimiters** ([`Option.Delimiter`](#smartinioptiondelimiter)`| tuple[Option.Delimiter, ...]`, optional)
-
-    Delimiter character(s) that delimit option keys from values. If multiple are given, the first will be taken for writing. `"["` is not allowed. Defaults to `"="`.
+    Delimiter character(s) that delimit option keys from values. If multiple are given, the first will be taken for writing. Defaults to `"="`.
 
 - **multiline_allowed** (`bool`, optional)
 
     Whether continuations of options (i.e. multiline options) are allowed. Defaults to `True`.
 
-- **multiline_prefix** (`str | re.Pattern | None`, optional)
+- **multiline_prefix** (`VALID_MARKERS | Literal["\t"] | None`, optional)
 
-    Prefix to denote continuations of multiline options. If set, will only accept continuations with that prefix (will throw a `ContinuationError` if that prefix is missing). Defaults to `None` (possible continuation after one entity delimiter).
+    Prefix to denote continuations of multiline options. If set, will only accept continuations with that prefix (will throw a `ContinuationError` if that prefix is missing). Defaults to `None` (possible continuation without prefix).
 
 - **multiline_ignore** (`tuple["section_name" | "option_delimiter" |
         "comment_prefix", ...] | None`, optional)
@@ -1158,6 +1136,15 @@ UndefinedOption(*args,**kwargs)
 ```
 
 Takes args and kwargs identical to [`Option`](#smartinioption). Can also take an Option to copy its attributes.
+
+## smartini.**VALID_MARKERS**
+
+```python
+VALID_MARKERS = Literal["\\","!",'"',"§","%","&","/","(",")","?",":",";","#","'","*",">","<","=",]
+```
+
+Valid characters for markers (option delimiter, comment prefix or multiline prefix).
+
 
 # Why still ini?
 
