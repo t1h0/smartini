@@ -1171,7 +1171,9 @@ As of now, this has been a one person project. If you want to contribute to it, 
     pip install -r requirements.txt
     ```
 
-3. Send a pull request once you're done :)
+3. Add appropriate test files to `./tests` and make sure `pytest .` finishes without a warning or exception.
+
+4. Send a pull request once you're done :)
 
 > Note: SmartIni's stub files "fool" type checkers by giving them false type annotations to ensure intuitive functionality (e.g. `Schema.iloc` is annotated to return the `Schema` (`Self`) although it actually returns a `SlotIlocViewer`). For development, you should disable the stub files (i.e. ignore them in your type checker config or rename them).
 
