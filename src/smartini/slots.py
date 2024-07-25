@@ -12,7 +12,6 @@ from .utils import OrderedDict
 from .exceptions_warnings import (
     SlotNotFound,
     SlotAlreadyExists,
-    IniStructureError,
     DuplicateEntityError,
 )
 
@@ -454,9 +453,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
     ) -> None:
 
         if any(entity not in vars(self).values() for entity in new_structure):
-            raise IniStructureError(
-                "Entities of new structure must all belong to section."
-            )
+            raise ValueError("Entities of new structure must all belong to section.")
         slots = self._slots.slot_access(slots)
         self._set_slots(
             create_missing_slots=create_missing_slots,
