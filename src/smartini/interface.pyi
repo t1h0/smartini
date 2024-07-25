@@ -217,15 +217,15 @@ class Section:
         """
 
     @classmethod
-    def _get_comment_by_content(
+    def _get_comments_by_content(
         cls, content: str | re.Pattern
     ) -> dict[str, Comment]: ...
     @classmethod
-    def get_comment_by_content(cls, content: str | re.Pattern) -> dict[str, Comment]:
-        """Get a comment by its content.
+    def get_comments_by_content(cls, content: str | re.Pattern) -> dict[str, Comment]:
+        """Get comments matching the content.
 
         Args:
-            content (str | re.Pattern): The content of the comment.
+            content (str | re.Pattern): The content to search for.
 
         Returns:
             dict[str, Comment]: All comments that fit the content argument with variable

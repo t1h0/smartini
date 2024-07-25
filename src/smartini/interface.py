@@ -388,11 +388,11 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     def set_option(self, *args, **kwargs) -> ...:
         return self._set_option(*args, **kwargs)
 
-    def _get_comment_by_content(self, content: str | re.Pattern) -> dict[str, Comment]:
-        """Get a comment by its content.
+    def _get_comments_by_content(self, content: str | re.Pattern) -> dict[str, Comment]:
+        """Get comments matching the content.
 
         Args:
-            content (str | re.Pattern): The content of the comment.
+            content (str | re.Pattern): The content to search for.
 
         Returns:
             dict[str, Comment]: All comments that fit the content argument with variable
@@ -404,12 +404,12 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         return {
             name: var
             for name, var in vars(self).items()
-            if isinstance(var, Comment) and re.search(var.content, content)
+            if isinstance(var, Comment) and re.search(content, var.content)
         }
 
-    @copy_doc(_get_comment_by_content, annotations=True)
-    def get_comment_by_content(self, *args, **kwargs) -> ...:
-        return self._get_comment_by_content(*args, **kwargs)
+    @copy_doc(_get_comments_by_content, annotations=True)
+    def get_comments_by_content(self, *args, **kwargs) -> ...:
+        return self._get_comments_by_content(*args, **kwargs)
 
     def _get_comments(self) -> dict[str, Comment]:
         """Get all comments of the section.

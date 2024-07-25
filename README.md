@@ -47,7 +47,7 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
     - [smartini.Schema.**with\_slot**](#smartinischemawith_slot)
   - [smartini.**Section**](#smartinisection)
     - [smartini.Section.**add\_entity**](#smartinisectionadd_entity)
-    - [smartini.Section.**get\_comment\_by\_content**](#smartinisectionget_comment_by_content)
+    - [smartini.Section.**get\_comments\_by\_content**](#smartinisectionget_comments_by_content)
     - [smartini.Section.**get\_option**](#smartinisectionget_option)
     - [smartini.Section.**get\_options**](#smartinisectionget_options)
     - [smartini.Section.**set\_option**](#smartinisectionset_option)
@@ -730,13 +730,13 @@ Add a new entity to the section.
 
     The newly created entity.
 
-### smartini.Section.**get_comment_by_content**
+### smartini.Section.**get_comments_by_content**
 
 ```python
-Section.get_comment_by_content(content)
+Section.get_comments_by_content(content)
 ```
 
-Get a comment by its content.
+Get comments matching the content.
 
 **Args**
 
