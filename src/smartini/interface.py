@@ -939,7 +939,7 @@ class _ReadIni:
             )
             and unnamed.nslot == 0
         ):
-            del unnamed
+            delattr(target, UNNAMED_SECTION_NAME)
 
     def _get_unnamed_section(self) -> Section | None:
         """Get the unnamed section (always at the beginning of the ini).
