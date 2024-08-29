@@ -857,7 +857,7 @@ class _ReadIni:
                 )
                 if slot_key not in slot_keys
             )
-            self.target._slots.add(slots)
+            self.target._slots.add(self.slots)
         else:
             self.slots = self.target._slots.slot_access(slots, verify=True)
 
@@ -913,7 +913,7 @@ class _ReadIni:
                 # we need a current section to extract options and comments
                 if self.current_section is False:
                     warnings.warn(
-                        f"Line {self.current_entity_index} is being ignored because it's inside an undefined section and read_undefined is set to {self.parameters.read_undefined}.",
+                        f"Line {self.current_entity_index + 1} is being ignored because it's inside an undefined section and read_undefined is set to {self.parameters.read_undefined}.",
                         UndefinedSectionWarning,
                     )
 
@@ -996,7 +996,7 @@ class _ReadIni:
             if self.parameters.read_undefined not in {True, "section"}:
                 # section is not defined and undefined sections are not allowed, thus
                 warnings.warn(
-                    f"Line {self.current_entity_index} is not a defined section, thus the whole section is being ignored (read_undefined is set to {self.parameters.read_undefined}).",
+                    f"Line {self.current_entity_index + 1} is not a defined section, thus the whole section is being ignored (read_undefined is set to {self.parameters.read_undefined}).",
                     UndefinedSectionWarning,
                 )
                 return False
@@ -1076,7 +1076,7 @@ class _ReadIni:
                 )
             else:
                 warnings.warn(
-                    f"Line {self.current_entity_index} is being ignored because it's not a defined option (read_undefined is set to {self.parameters.read_undefined}).",
+                    f"Line {self.current_entity_index + 1} is being ignored because it's not a defined option (read_undefined is set to {self.parameters.read_undefined}).",
                     UndefinedOptionWarning,
                 )
                 return False
@@ -1154,12 +1154,12 @@ class _ReadIni:
             )
         elif self.current_option is None:
             warnings.warn(
-                f"Line {self.current_entity_index} is being ignored because it's invalid.",
+                f"Line {self.current_entity_index + 1} is being ignored because it's invalid.",
                 IniStructureWarning,
             )
         elif not self.parameters.multiline_allowed:
             warnings.warn(
-                f"Line {self.current_entity_index} is being ignored because it's multiline to {f"'{self.current_option.key}'" if self.current_option else "an undefined option"} (multiline_allowed is set to {self.parameters.multiline_allowed}).",
+                f"Line {self.current_entity_index + 1} is being ignored because it's multiline to {f"'{self.current_option.key}'" if self.current_option else "an undefined option"} (multiline_allowed is set to {self.parameters.multiline_allowed}).",
                 MultilineWarning,
             )
 
