@@ -392,9 +392,9 @@ SmartIni by default allows for multiline option values, so for the whole value t
 
 ## Undefined configurations
 
-Smartini can also read configurations that are not defined in-code in your [Schema](#smartinischema) class. To do so, simply pass `read_undefined = True` to your [Schema initialization](#smartinischema). To access undefined content, use [get_sections](#smartinischemaget_sections) and [get_options](#smartinisectionget_options) with `include_undefined="only"`.
+Smartini can also read configurations that are not defined in your [Schema](#smartinischema) class. To do so, simply pass `read_undefined = True` to your [Schema initialization](#smartinischema). To access undefined content, use [get_sections](#smartinischemaget_sections) and [get_options](#smartinisectionget_options) with `include_undefined="only"`.
 
-> Note: If you leave `read_undefined = False` (default), smartini will throw an `IniStructureError` if it encounters undefined content.
+> Note: If you leave `read_undefined = False` (default), smartini will print a warning if it encounters undefined content.
 
 # Documentation
 
@@ -522,7 +522,7 @@ Parameters(comment_prefixes = ";", option_delimiters = "=", multiline_allowed = 
 
 - **multiline_prefix** (`VALID_MARKERS | Literal["\t"] | None`, optional)
 
-    Prefix to denote continuations of multiline options. If set, will only accept continuations with that prefix (will throw a `ContinuationError` if that prefix is missing). Defaults to `None` (possible continuation without prefix).
+    Prefix to denote continuations of multiline options. If set, will only accept continuations with that prefix. Defaults to `None` (possible continuation without prefix).
 
 - **multiline_ignore** (`tuple["section_name" | "option_delimiter" |
         "comment_prefix", ...] | None`, optional)

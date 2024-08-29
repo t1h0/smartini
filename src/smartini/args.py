@@ -47,8 +47,7 @@ class Parameters:
                 ContinuationError for any continuation. Defaults to True.
             multiline_prefix (VALID_MARKERS | Literal["\t"] | None, optional): Prefix to
                 denote continuations of multiline options. If set, will only accept
-                continuations with that prefix (will throw a ContinuationError if that
-                prefix is missing). Defaults to None (possible continuation without
+                continuations with that prefix. Defaults to None (possible continuation without
                 prefix).
             multiline_ignore (tuple["section_name" | "option_delimiter" |
                 "comment_prefix", ...] | None, optional): Entity identifier(s) to ignore
