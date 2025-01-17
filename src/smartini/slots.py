@@ -77,7 +77,7 @@ class Slots[SlotValue](OrderedDict[SlotKey, SlotValue]):
             if key in self:
                 if not exist_ok:
                     raise IndexError(
-                        "Can't add slot with key '{key}' because it already exists."
+                        f"Can't add slot with key '{key}' because it already exists."
                     )
             else:
                 self[key] = (

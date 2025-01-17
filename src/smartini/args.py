@@ -1,10 +1,8 @@
-from typing import Literal, Any
+from typing import Literal
 import re
-from .entities import Option, Comment
 from .type_converters.converters import (
     TypeConverter,
     DEFAULT_GUESS_CONVERTER,
-    DEFAULT_STRING_CONVERTER,
     ConvertibleTypes,
     _type_hint_to_converter,
 )
@@ -30,7 +28,7 @@ class Parameters:
         ignore_whitespace_lines: bool = True,
         read_undefined: bool | Literal["section", "option"] = False,
         default_type_converter: (
-            type[TypeConverter | ConvertibleTypes] | None
+            TypeConverter | type[ConvertibleTypes] | None
         ) = DEFAULT_GUESS_CONVERTER,
     ) -> None:
         """
@@ -67,12 +65,13 @@ class Parameters:
                 "option" will read undefined options within defined sections but
                 not undefined sections and their content. If False, will ignore
                 undefined content. Defaults to False.
-            default_type_converter (type[TypeConverter | ConvertibleTypes] | None, optional):
+            default_type_converter (TypeConverter | type[ConvertibleTypes] | None, optional):
                 TypeConverter to apply to every option value (and continuation) that is
                 not explicitly annotated. Alternatively one of the ConvertibleTypes that
                 the respective option values should be interpreted as (will be matched
                 to a TypeConverter). If None, will save all values (and continuations)
-                as strings. Defaults to smartini.type_converters.DEFAULT_GUESS_CONVERTER.
+                as is (usually strings when read from a file). Defaults to
+                smartini.type_converters.DEFAULT_GUESS_CONVERTER.
         """
         # because comment_prefixes and option_delimiters check each other on setting
         self._comment_prefixes = ()
@@ -149,17 +148,15 @@ class Parameters:
         self._multiline_ignore = () if value is None else value
 
     @property
-    def default_type_converter(self) -> type[TypeConverter] | None:
+    def default_type_converter(self) -> TypeConverter | None:
         return self._default_type_converter
 
     @default_type_converter.setter
     def default_type_converter(
-        self, value: type[TypeConverter | ConvertibleTypes] | None
+        self, value: TypeConverter | type[ConvertibleTypes] | None
     ) -> None:
         self._default_type_converter = (
-            DEFAULT_STRING_CONVERTER
-            if value is None
-            else _type_hint_to_converter(value)
+            (lambda x: x) if value is None else _type_hint_to_converter(value)
         )
 
     def verify_marker(self, marker: tuple[str, ...], name: str) -> None:

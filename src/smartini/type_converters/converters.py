@@ -1,5 +1,6 @@
 """Converter classes and functions."""
 
+from functools import wraps
 from typing import (
     Callable,
     Any,
@@ -17,32 +18,25 @@ type ConvertibleTypes = ScalarTypes | list
 """Possible conversion result types."""
 
 
-class TypeConverter[ConvertedType]:
-    """Parent class for type converters. To create a type converter,
-    use new_converter()."""
-
-    def __new__(cls, value: Any) -> ConvertedType | Any: ...
+type TypeConverter[ConvertedType] = Callable[[Any], ConvertedType | Any]
+"""Type of type converter functions. To create a type converter, use converter decorator."""
 
 
-def new_converter[
-    T
-](processor: Callable[[str], T], name: str | None = None) -> type[TypeConverter[T]]:
+def converter[T](processor: Callable[[str], T]) -> TypeConverter[T]:
     """Create a new TypeConverter.
 
     Args:
-        processor (Callable[[str], T]): Callable to process the string input and convert
-            it into an instance of arbitrary type. If conversion is not possible, should
-            raise exceptions.WrongType.
-        name (str | None, optional): Name for the new TypeConverter. Will be appended to
-            result into TypeConverter_{name}. If None, will take the processor function's
-            name. Defaults to None.
+        processor (Callable[[str], T]): Callable to process the string input and
+            convert it into an instance of arbitrary type. If conversion is not
+            possible, should raise exceptions.WrongType.
 
     Returns:
-        type[TypeConverter[T]]: TypeConverter that will return the processed input on
-            call or the input itself if conversion was not possible.
+        TypeConverter[T]: TypeConverter that will return the processed input on call
+            or the input itself if conversion was not possible.
     """
 
-    def convert(cls, value: Any) -> T | Any:
+    @wraps(processor)
+    def convert(value: Any) -> T | Any:
         """Convert value.
 
         Args:
@@ -56,17 +50,42 @@ def new_converter[
                 return processor(value)
         return value
 
-    return type(
-        f"TypeConverter_{processor.__name__ if name is None else name}",
-        (TypeConverter,),
-        {"__new__": convert},
-    )
+    return convert
+
+
+def string_converter(strip_whitespace: bool = True) -> TypeConverter[str]:
+    """Create a new string converter.
+
+    Args:
+        strip_whitespace (bool, optional): Whether to strip leading and trailing
+            whitespace from the string. Defaults to True.
+    """
+
+    @converter
+    def to_string(string: str) -> str:
+        """Strip string of whitespace.
+
+        Args:
+            string (str): The string to strip.
+
+        Returns:
+            str: The stripped string.
+        """
+        if not isinstance(string, str):
+            raise WrongType
+        return string.strip() if strip_whitespace else string
+
+    return to_string
+
+
+DEFAULT_STRING_CONVERTER = string_converter()
+"""String converter with default conversion parameters."""
 
 
 def bool_converter(
     true: str | tuple[str, ...] = ("1", "true", "yes", "y"),
     false: str | tuple[str, ...] = ("0", "false", "no", "n"),
-) -> type[TypeConverter[bool]]:
+) -> TypeConverter[bool]:
     """Create a new bool converter.
 
     Args:
@@ -76,7 +95,7 @@ def bool_converter(
             Defaults to ("0", "false", "no", "n").
 
     Returns:
-        type[TypeConverter[bool]]: The bool type converter.
+        TypeConverter[bool]: The bool converter.
     """
 
     if not isinstance(true, tuple):
@@ -87,6 +106,7 @@ def bool_converter(
         false = (false,)
     false = tuple(i.lower() for i in false)
 
+    @converter
     def to_bool(string: str) -> bool:
         """Converts a string to bool.
 
@@ -99,14 +119,14 @@ def bool_converter(
         Returns:
             bool: The converted boolean.
         """
-        string = string.lower()
+        string = string.lower().strip()
         if string in true:
             return True
         elif string in false:
             return False
         raise WrongType
 
-    return new_converter(to_bool)
+    return to_bool
 
 
 type Numerics = int | float | complex
@@ -119,7 +139,7 @@ def numeric_converter[
     numeric_type: type[T] | tuple[type[T], ...] = (int, float, complex),
     decimal_sep: str = ".",
     thousands_sep: str = ",",
-) -> type[TypeConverter[T]]:
+) -> TypeConverter[T]:
     """Create a new numeric type converter.
 
     Args:
@@ -133,12 +153,13 @@ def numeric_converter[
             Defaults to ",".
 
     Returns:
-        type[TypeConverter[int | float | complex]]: The numeric type converter.
+        TypeConverter[int | float | complex]: The numeric type converter.
     """
 
     if not isinstance(numeric_type, tuple):
         numeric_type = (numeric_type,)
 
+    @converter
     def to_num(string: str) -> T:
         """Convert string to numeric type.
 
@@ -172,7 +193,7 @@ def numeric_converter[
                 return converter(string)
         raise WrongType
 
-    return new_converter(to_num)
+    return to_num
 
 
 @overload
@@ -181,32 +202,32 @@ def list_converter[
 ](
     delimiter: str = ",",
     remove_whitespace: bool = True,
-    item_converter: type[TypeConverter[T]] = ...,
-) -> type[TypeConverter[list[T | Any]]]: ...
+    item_converter: TypeConverter[T] = ...,
+) -> TypeConverter[list[T | Any]]: ...
 @overload
 def list_converter(
     delimiter: str = ",",
     remove_whitespace: bool = True,
     item_converter: None = None,
-) -> type[TypeConverter[list[ScalarTypes | Any]]]: ...
+) -> TypeConverter[list[ScalarTypes | Any]]: ...
 def list_converter[
     T
 ](
     delimiter: str = ",",
     remove_whitespace: bool = True,
-    item_converter: type[TypeConverter[T]] | None = None,
-) -> type[TypeConverter[list[T | Any] | list[ScalarTypes | Any]]]:
+    item_converter: TypeConverter[T] | None = None,
+) -> TypeConverter[list[T | Any] | list[ScalarTypes | Any]]:
     """Create a new list type converter.
 
     Args:
         delimiter (str, optional): Delimiter that separates list items. Defaults to ",".
         remove_whitespace (bool, optional): Whether whitespace between items and
             delimiter should be removed. Defaults to True.
-        item_converter (type[TypeConverter[Any]]): TypeConverter to convert each list
+        item_converter (TypeConverter[Any]): TypeConverter to convert each list
             item with. If None, will use Guess TypeConverter. Defaults to None.
 
     Returns:
-        type[TypeConverter[list]]: The new list type converter.
+        TypeConverter[list]: The new list type converter.
     """
 
     if item_converter is None:
@@ -217,6 +238,7 @@ def list_converter[
         rf"\s*{re.escape(delimiter)}\s*" if remove_whitespace else delimiter
     )
 
+    @converter
     def to_list(string: str) -> list[T | str] | list[ScalarTypes | str]:
         """Convert a string to a list.
 
@@ -235,46 +257,36 @@ def list_converter[
             item_converter(s) for s in re.split(pattern=split_delimiter, string=string)
         ]
 
-    return new_converter(to_list)
+    return to_list
 
 
 def guess_converter(
-    *types: type[Any | TypeConverter],
-) -> type[TypeConverter]:
+    *types: type[Any] | TypeConverter,
+    fallback: TypeConverter = DEFAULT_STRING_CONVERTER,
+) -> TypeConverter:
     """Create a new type converter that guesses the type.
 
     Args:
         *types (type): The types to guess. If not provided,
             will guess all of ConvertibleTypes.
+        fallback (TypeConverter, optional): Fallback converter if no type
+            could be guessed.
 
     Returns:
-        type[TypeConverter]: The new Guess-TypeConverter.
+        TypeConverter: The new Guess-TypeConverter.
     """
 
     if types:
         # convert the types to guess into type converters
-        converters = tuple(_type_hint_to_converter(t) for t in types)  # type: ignore
-        # set name for the converter
-        name = "guess_" + "_".join(
-            (
-                postfix[0]
-                if (
-                    postfix := re.search(
-                        r"(?<=_).*", cname := c.__name__ if c else "None"
-                    )
-                )
-                else cname
-            )
-            for c in converters
-        )
+        converters = tuple(_type_hint_to_converter(t) for t in types)
     else:
         converters = (
             DEFAULT_NUMERIC_CONVERTER,
             DEFAULT_BOOL_CONVERTER,
             DEFAULT_LIST_CONVERTER,
         )
-        name = None
 
+    @converter
     def guess(string: str) -> Any:
         """Convert to string to a type by guessing.
 
@@ -287,57 +299,53 @@ def guess_converter(
         Returns:
             Any: The converted type.
         """
-        for converter in converters:
-            if converter is not None and (guess := converter(string)) != string:
+        for conv in converters:
+            if conv is not None and (guess := conv(string)) != string:
                 return guess
-        raise WrongType
+        return fallback(string)
 
-    return new_converter(processor=guess, name=name)
+    return guess
 
 
 @overload
 def _type_hint_to_converter[
-    T: ScalarTypes
-](type_hint: type[T],) -> type[TypeConverter[T]]: ...
-@overload
-def _type_hint_to_converter[
-    T: TypeConverter
-](type_hint: type[T],) -> type[T] | None: ...
+    T: ConvertibleTypes
+](type_hint: type[T],) -> TypeConverter[T]: ...
 @overload
 def _type_hint_to_converter[
     T: Any
-](type_hint: type[T],) -> type[TypeConverter[T]] | None: ...
+](type_hint: TypeConverter[T],) -> TypeConverter[T]: ...
 def _type_hint_to_converter[
     T
-](type_hint: type[T],) -> type[TypeConverter[T] | T] | None:
+](type_hint: Any,) -> TypeConverter[T] | None:
     """Convert a type to its respective TypeConverter.
 
     Args:
         type_hint (type): The type to convert.
 
     Returns:
-        type[TypeConverter] | None: The matching TypeConvert or None if type is not
+        TypeConverter | None: The matching TypeConvert or None if type is not
             convertible.
     """
-    if issubclass(type_hint, TypeConverter):
-        return type_hint
     if (origin := get_origin(type_hint)) and origin is list:
 
         if (list_args := get_args(type_hint)) and len(list_args) == 1:
             # list has exactly one type hint -> get item converter
             item_converter = _type_hint_to_converter(list_args[0])
-            return list_converter(item_converter=item_converter)  # type: ignore
+            return list_converter(item_converter=item_converter)
 
-        return DEFAULT_LIST_CONVERTER  # type: ignore
+        return DEFAULT_LIST_CONVERTER
 
     if type_hint in {int, float, complex}:
-        return numeric_converter(numeric_type=type_hint)  # type: ignore
+        return numeric_converter(numeric_type=type_hint)
     if type_hint is bool:
-        return DEFAULT_BOOL_CONVERTER  # type: ignore
+        return DEFAULT_BOOL_CONVERTER
     if type_hint is list:
-        return DEFAULT_LIST_CONVERTER  # type: ignore
+        return DEFAULT_LIST_CONVERTER
     if type_hint is str:
-        return DEFAULT_STRING_CONVERTER  # type: ignore
+        return DEFAULT_STRING_CONVERTER
+    if isinstance(type_hint, Callable):
+        return type_hint
 
     return None
 
@@ -351,5 +359,3 @@ DEFAULT_LIST_CONVERTER = list_converter()
 """List converter with default conversion parameters."""
 DEFAULT_GUESS_CONVERTER = guess_converter()
 """Guess converter with default conversion parameters."""
-DEFAULT_STRING_CONVERTER = new_converter(lambda x: x, "to_str")
-"""String "converter" to save values as they are."""

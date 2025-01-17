@@ -109,7 +109,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         self,
         key: OptionKey,
         values: Any | list[Any] | None = None,
-        type_converter: type[TypeConverter] | None = None,
+        type_converter: TypeConverter | None = None,
         slots: SlotAccess = None,
     ) -> None:
         """
@@ -121,9 +121,8 @@ class Option(_SlotEntity[OptionSlotValue]):
                 (one value per slot or one/same value for all slots). Should be None if
                 from_string is provided, otherwise from_string will be ignored.
                 Defaults to None.
-            type_converter (type[TypeConverter] | None, optional): A TypeConverter class
-                to apply whenever a new value is set. If None will not convert.
-                Defaults to None.
+            type_converter (TypeConverter | None, optional): A TypeConverter to apply
+                whenever a new value is set. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save value(s) in. If None, will
                 create numerical slot keys starting from 0. Otherwise, number of slots
                 must match number of values, unless number of values is 1 (:= same value
@@ -213,7 +212,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         cls,
         string: str,
         delimiter: VALID_MARKERS | tuple[VALID_MARKERS, ...],
-        type_converter: type[TypeConverter] | None = None,
+        type_converter: TypeConverter | None = None,
         *,
         slots: SlotAccess = None,
     ) -> Self:
@@ -223,7 +222,7 @@ class Option(_SlotEntity[OptionSlotValue]):
             string (str): The string that contains the option key and value.
             delimiter (VALID_MARKERS | tuple[VALID_MARKERS, ...]): One or more
                 delimiters that can separates option key and value. Defaults to None.
-            type_converter (type[TypeConverter] | None, optional): A TypeConverter class
+            type_converter (type[TypeConverter] | None, optional): A TypeConverter
                 to apply. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save the value in. Defaults to None.
 
@@ -250,7 +249,7 @@ class Option(_SlotEntity[OptionSlotValue]):
             # taking last word of left side as key
             return cls(
                 key=last_key[0],
-                values=lr[1].strip() or None,
+                values=lr[1] or None,
                 type_converter=type_converter,
                 slots=slots,
             )
@@ -260,7 +259,7 @@ class Option(_SlotEntity[OptionSlotValue]):
     def add_continuation(
         self,
         continuation: str,
-        type_converter: type[TypeConverter] | None = None,
+        type_converter: TypeConverter | None = None,
         *,
         slots: SlotAccess,
     ) -> None:

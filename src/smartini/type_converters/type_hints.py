@@ -8,6 +8,7 @@ from .converters import (
     DEFAULT_GUESS_CONVERTER,
     DEFAULT_LIST_CONVERTER,
     DEFAULT_NUMERIC_CONVERTER,
+    DEFAULT_STRING_CONVERTER,
     guess_converter,
 )
 
@@ -25,11 +26,11 @@ NUMERIC = TYPE[DEFAULT_NUMERIC_CONVERTER]
 """Numeric type converter."""
 LIST = TYPE[DEFAULT_LIST_CONVERTER]
 """List type converter."""
-STR = TYPE[str]
-"""Annotation for a string option value."""
+STR = TYPE[DEFAULT_STRING_CONVERTER]
+"""String type converter."""
 
 
-def _resolve_TYPE(type_hint: type) -> type[TypeConverter]:
+def _resolve_TYPE[T](type_hint: type[T]) -> TypeConverter[T]:
     """Resolve a TYPE type hint to a converter.
 
     Args:
@@ -39,7 +40,7 @@ def _resolve_TYPE(type_hint: type) -> type[TypeConverter]:
         ValueError: If type_hint is not TYPE.
 
     Returns:
-        type[TypeConverter]: TypeConverter for the requested type(s).
+        TypeConverter: TypeConverter for the requested type(s).
     """
 
     if (
