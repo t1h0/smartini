@@ -278,7 +278,11 @@ def guess_converter(
 
     if types:
         # convert the types to guess into type converters
-        converters = tuple(_type_hint_to_converter(t) for t in types)
+        converters = tuple(
+            type_converter
+            for t in types
+            if (type_converter := _type_to_converter(t)) is not None
+        )
     else:
         converters = (
             DEFAULT_NUMERIC_CONVERTER,
@@ -300,7 +304,7 @@ def guess_converter(
             Any: The converted type.
         """
         for conv in converters:
-            if conv is not None and (guess := conv(string)) != string:
+            if (guess := conv(string)) != string:
                 return guess
         return fallback(string)
 
@@ -308,14 +312,14 @@ def guess_converter(
 
 
 @overload
-def _type_hint_to_converter[
+def _type_to_converter[
     T: ConvertibleTypes
 ](type_hint: type[T],) -> TypeConverter[T]: ...
 @overload
-def _type_hint_to_converter[
+def _type_to_converter[
     T: Any
 ](type_hint: TypeConverter[T],) -> TypeConverter[T]: ...
-def _type_hint_to_converter[
+def _type_to_converter[
     T
 ](type_hint: Any,) -> TypeConverter[T] | None:
     """Convert a type to its respective TypeConverter.
@@ -331,7 +335,7 @@ def _type_hint_to_converter[
 
         if (list_args := get_args(type_hint)) and len(list_args) == 1:
             # list has exactly one type hint -> get item converter
-            item_converter = _type_hint_to_converter(list_args[0])
+            item_converter = _type_to_converter(list_args[0])
             return list_converter(item_converter=item_converter)
 
         return DEFAULT_LIST_CONVERTER

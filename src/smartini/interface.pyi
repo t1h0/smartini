@@ -336,7 +336,7 @@ class Schema:
         | OrderedDict[str, Section]
         | OrderedDict[str, UndefinedSection]
     ):
-        """Get the Schemas's sections.
+        """Get the Schema's sections.
 
         Args:
             include_undefined (bool | "only", optional): Whether to include undefined

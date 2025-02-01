@@ -4,7 +4,7 @@ from .type_converters.converters import (
     TypeConverter,
     DEFAULT_GUESS_CONVERTER,
     ConvertibleTypes,
-    _type_hint_to_converter,
+    _type_to_converter,
 )
 from .globals import VALID_MARKERS
 
@@ -156,7 +156,7 @@ class Parameters:
         self, value: TypeConverter | type[ConvertibleTypes] | None
     ) -> None:
         self._default_type_converter = (
-            (lambda x: x) if value is None else _type_hint_to_converter(value)
+            (lambda x: x) if value is None else _type_to_converter(value)
         )
 
     def verify_marker(self, marker: tuple[str, ...], name: str) -> None:

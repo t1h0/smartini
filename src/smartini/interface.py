@@ -1,6 +1,11 @@
 """Interface classes exist for coder interaction, to simplify the process
 behind smartini."""
 
+# third-party imports
+from charset_normalizer import from_bytes as read_from_bytes
+
+# built-in imports
+from functools import wraps
 from typing import (
     Any,
     Literal,
@@ -13,7 +18,8 @@ import re
 from pathlib import Path
 import warnings
 import contextlib
-from charset_normalizer import from_bytes as read_from_bytes
+
+# local imports
 from .exceptions_warnings import (
     MultilineWarning,
     IniStructureWarning,
@@ -49,7 +55,6 @@ from .globals import (
     INTERNAL_PREFIX_IN_WORDS,
 )
 from .utils import _str_to_var, OrderedDict, copy_doc
-from .type_converters.type_hints import _resolve_TYPE
 
 
 class SectionMeta(type):
@@ -85,30 +90,18 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
         super().__init__()
 
-        type_hints = get_type_hints(self)
-
         # initialize Options
         for var, val in vars(self.__class__).items():
             # every string variable without leading and trailing underscores
             # will be interpreted as an option
-            if (
-                not re.fullmatch(r"^__.*__$", var)
-                and isinstance(val, str)
-                and var != SECTION_NAME_VARIABLE
-            ):
+            if isinstance(val, Option):
                 if var.startswith(INTERNAL_PREFIX):
                     raise NameError(
-                        f"'{var}' is interpreted as an Option but Option variable names"
-                        f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
+                        f"Option variable names must not\
+                            start with {INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
                     )
 
-                # create option and add to Section
-                option = Option(
-                    key=val,
-                    type_converter=(
-                        _resolve_TYPE(type_hints[var]) if var in type_hints else None
-                    ),
-                )
+                option = Option(key=val.key, type_converter=val._type_converter)
                 super().__setattr__(var, option)
                 self._schema_structure.append(option)
 
@@ -248,7 +241,6 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedOption]: ...
-
     def _get_options(
         self,
         include_undefined: bool | Literal["only"] = True,
@@ -298,17 +290,13 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
         for var, val in vars(cls).items():
             # every string variable without leading and trailing underscores
             # will be interpreted as an option
-            if (
-                not re.fullmatch(r"^__.*__$", var)
-                and isinstance(val, str)
-                and var != SECTION_NAME_VARIABLE
-            ):
+            if isinstance(val, Option):
                 if var.startswith(INTERNAL_PREFIX):
                     raise NameError(
-                        f"'{var}' is interpreted as an Option but Option variable names"
-                        f" must not start with {INTERNAL_PREFIX_IN_WORDS}."
+                        f"Option variable names must not start with\
+                            {INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
                     )
-                out[var] = Option(key=val)
+                out[var] = val
         return out
 
     @overload
@@ -913,7 +901,9 @@ class _ReadIni:
                 # we need a current section to extract options and comments
                 if self.current_section is False:
                     warnings.warn(
-                        f"Line {self.current_entity_index + 1} is being ignored because it's inside an undefined section and read_undefined is set to {self.parameters.read_undefined}.",
+                        f"Line {self.current_entity_index + 1} is being ignored\
+                            because it's inside an undefined section and read_undefined\
+                                is set to {self.parameters.read_undefined}.",
                         UndefinedSectionWarning,
                     )
 
@@ -996,7 +986,9 @@ class _ReadIni:
             if self.parameters.read_undefined not in {True, "section"}:
                 # section is not defined and undefined sections are not allowed, thus
                 warnings.warn(
-                    f"Line {self.current_entity_index + 1} is not a defined section, thus the whole section is being ignored (read_undefined is set to {self.parameters.read_undefined}).",
+                    f"Line {self.current_entity_index + 1} is not a defined section,\
+                        thus the whole section is being ignored (read_undefined is\
+                            set to {self.parameters.read_undefined}).",
                     UndefinedSectionWarning,
                 )
                 return False
@@ -1076,7 +1068,9 @@ class _ReadIni:
                 )
             else:
                 warnings.warn(
-                    f"Line {self.current_entity_index + 1} is being ignored because it's not a defined option (read_undefined is set to {self.parameters.read_undefined}).",
+                    f"Line {self.current_entity_index + 1} is being ignored because\
+                        it's not a defined option (read_undefined is set to\
+                            {self.parameters.read_undefined}).",
                     UndefinedOptionWarning,
                 )
                 return False

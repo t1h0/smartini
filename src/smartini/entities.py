@@ -1,11 +1,15 @@
 """Ini entities are either a section name, an option or a comment."""
 
-from typing import overload, Any, Self
+from typing import overload, Any, Self, cast
 from dataclasses import dataclass
 import re
 from .exceptions_warnings import ExtractionError
 from .slots import SlotAccess, _SlotEntity
-from .type_converters.converters import TypeConverter
+from .type_converters.converters import (
+    TypeConverter,
+    guess_converter,
+    ConvertibleTypes,
+)
 from .globals import VALID_MARKERS
 
 
@@ -105,11 +109,24 @@ class OptionSlotValue:
 class Option(_SlotEntity[OptionSlotValue]):
     """Option object holding an option's value (per slot) and key."""
 
+    def __new__[
+        T
+    ](
+        cls,
+        key: OptionKey = "",
+        typ: type[T] = type[ConvertibleTypes],
+        type_converter: TypeConverter | None = None,
+        values: Any | list[Any] | None = None,
+        slots: SlotAccess = None,
+    ) -> T:
+        return cast(typ, super().__new__(cls))
+
     def __init__(
         self,
         key: OptionKey,
-        values: Any | list[Any] | None = None,
+        typ: type | None = None,
         type_converter: TypeConverter | None = None,
+        values: Any | list[Any] | None = None,
         slots: SlotAccess = None,
     ) -> None:
         """
@@ -117,12 +134,16 @@ class Option(_SlotEntity[OptionSlotValue]):
             key (str | int | None, optional): The option key. Should be None if
                 from_string is provided, otherwise from_string will be ignored.
                 Defaults to None.
+            typ (type | None, optional): The type the option value should be converted
+                to. Will also be used for type guessing if type_converter is None.
+                Defaults to None.
+            type_converter (TypeConverter | None, optional): The TypeConverter to apply
+                whenever a new value is set. Overrides type guessing by typ.
+                If None will not apply. Defaults to None.
             values (Any | list[Any] | None, optional): The option value or values
                 (one value per slot or one/same value for all slots). Should be None if
                 from_string is provided, otherwise from_string will be ignored.
                 Defaults to None.
-            type_converter (TypeConverter | None, optional): A TypeConverter to apply
-                whenever a new value is set. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save value(s) in. If None, will
                 create numerical slot keys starting from 0. Otherwise, number of slots
                 must match number of values, unless number of values is 1 (:= same value
@@ -131,7 +152,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         super().__init__(OptionSlotValue)
 
         self.key = key
-        self._type_converter = type_converter
+        self._type_converter = type_converter or (guess_converter(typ) if typ else None)
 
         # verifying slots
         if slots is None:
@@ -222,7 +243,7 @@ class Option(_SlotEntity[OptionSlotValue]):
             string (str): The string that contains the option key and value.
             delimiter (VALID_MARKERS | tuple[VALID_MARKERS, ...]): One or more
                 delimiters that can separates option key and value. Defaults to None.
-            type_converter (type[TypeConverter] | None, optional): A TypeConverter
+            type_converter (TypeConverter | None, optional): A TypeConverter
                 to apply. If None will not convert. Defaults to None.
             slots (SlotAccess, optional): Slot(s) to save the value in. Defaults to None.
 
@@ -249,7 +270,7 @@ class Option(_SlotEntity[OptionSlotValue]):
             # taking last word of left side as key
             return cls(
                 key=last_key[0],
-                values=lr[1] or None,
+                values=lr[1].strip() or None,
                 type_converter=type_converter,
                 slots=slots,
             )
@@ -307,6 +328,9 @@ class CommentGroup(list[Comment]):
 
 class UndefinedOption(Option):
     """Option, that is not hard coded in the provided schema."""
+
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(*args, **kwargs)
 
     def __init__(self, *args, **kwargs) -> None:
         """Takes args and kwargs identical to Option. Can also take an Option to copy its
