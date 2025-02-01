@@ -537,6 +537,13 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
+        if SlotView._is_accessible(name, attr):
+            with contextlib.suppress(AttributeError):
+                return (
+                    super()
+                    .__getattribute__("_slot_decider")
+                    .__getattribute__("_decide_and_access")(self, attr)
+                )
         if isinstance(attr, Section):
             return SlotDecider(
                 target=attr, slots=self._slots, decider_method=self._decider_method
@@ -1178,7 +1185,25 @@ class SlotView:
         super().__setattr__("_target", target)
         super().__setattr__("_slot_views", {})
 
-    def _slot_access(self, access_target: Callable, slot: SlotAccess) -> Callable:
+    @classmethod
+    def _is_accessible(cls, name: str, attr: Any) -> bool:
+        """Check if an attribute is slot accessible.
+
+        Args:
+            name (str): The name of the attribute.
+            attr (Any): The attribute to check.
+
+        Returns:
+            bool: Whether the attribute is accessible.
+        """
+        return (
+            not name.startswith("__")
+            and callable(attr)
+            and SlotAccess in get_type_hints(attr).values()
+        )
+
+    @classmethod
+    def _slot_access(cls, access_target: Callable, slot: SlotAccess) -> Callable:
         """Access a callable and set the slot accordingly.
 
         Args:
@@ -1193,10 +1218,12 @@ class SlotView:
             k for k, v in get_type_hints(access_target).items() if v == SlotAccess
         ]
 
+        @wraps(access_target)
         def accessor_func(*args, **kwargs):
-            for access_kwarg in access_kwargs:
-                kwargs[access_kwarg] = slot
-            return access_target(*args, **kwargs)
+            return access_target(
+                *args,
+                **({access_kwarg: slot for access_kwarg in access_kwargs} | kwargs),
+            )
 
         return accessor_func
 
@@ -1214,9 +1241,9 @@ class SlotView:
         target, attr = super().__getattribute__("_get_target_attr")(name)
         if not (isinstance(attr, Option) and isinstance(target, Section)):
             raise AttributeError("Assignment only valid for options.")
-        super().__getattribute__("_slot_access")(
-            access_target=target._set_option, slot=slot
-        )(name=name, value=value)
+        SlotView._slot_access(access_target=target._set_option, slot=slot)(
+            name=name, value=value
+        )
 
     def _get_target_attr(self, name: str) -> tuple[Schema | Section, Any]:
         """Get target of the SlotView and an attribute of the target.
@@ -1249,6 +1276,9 @@ class SlotDecider(SlotView):
         super().__setattr__("_slots", slots)
 
     def __getattribute__(self, name: str) -> Any:
+        if name.startswith("__"):
+            return super().__getattribute__(name)
+
         target, attr = super().__getattribute__("_get_target_attr")(name)
 
         if isinstance(attr, Option):
@@ -1259,13 +1289,8 @@ class SlotDecider(SlotView):
                 super().__getattribute__("_slots"),
                 super().__getattribute__("_decider_method"),
             )
-        elif (
-            not name.startswith("__")
-            and callable(attr)
-            and SlotAccess in get_type_hints(attr).values()
-        ):
-            slot_key = super().__getattribute__("_decide_slot")(target)[0]
-            return super().__getattribute__("_slot_access")(attr, slot_key)
+        elif SlotView._is_accessible(name, attr):
+            return super().__getattribute__("_decide_and_access")(target, attr)
 
         return attr
 
@@ -1274,17 +1299,28 @@ class SlotDecider(SlotView):
         slot = super().__getattribute__("_decide_slot")(attr)[0]
         super().__getattribute__("_set_slot")(name, value, slot)
 
-    def _decide_slot(self, target: Option | Section) -> tuple[
+    @overload
+    def _decide_slot(self, target: Schema | Section) -> tuple[
         SlotKey,
-        OptionSlotValue | Structure,
+        Structure,
+    ]: ...
+    @overload
+    def _decide_slot(self, target: Option) -> tuple[
+        SlotKey,
+        OptionSlotValue,
+    ]: ...
+    def _decide_slot(self, target: Schema | Section | Option) -> tuple[
+        SlotKey,
+        Structure | OptionSlotValue,
     ]:
         """Decides, which slot to access using the defined decider method.
 
         Args:
-            target (Option | Section): The Option or Section that is to be accessed.
+            target (Schema | Option | Section): The Schema, Section or Option
+                that is to be accessed.
 
         Returns:
-            tuple[SlotKey, OptionSlotValue | SectionStructure]: Tuple of the target's
+            tuple[SlotKey, Structure | OptionSlotValue]: Tuple of the target's
                 decided slot's key and value.
 
         """
@@ -1295,26 +1331,67 @@ class SlotDecider(SlotView):
             target=target, reference_slots=slots, method=decider_method
         )
 
+    def _decide_and_access(
+        self, target: Schema | Section | Option, attr: Callable
+    ) -> Any:
+        """Decides, which slot to access using the defined decider method and accesses
+        the target Callable with it.
+
+        Args:
+            target (Schema | Section | Option): The Schema, Section or Option
+                that is to be accessed.
+            attr (Callable): The Callable to access.
+
+        Returns:
+            Any: The target Callable's return.
+
+        """
+        slot_key = super().__getattribute__("_decide_slot")(target)[0]
+        return SlotView._slot_access(attr, slot_key)
+
+    @overload
     @classmethod
     def _decision(
         cls,
-        target: Option | Section,
+        target: Schema | Section,
         reference_slots: Slots,
         method: SlotDeciderMethods,
     ) -> tuple[
         SlotKey,
-        OptionSlotValue | Structure,
+        Structure,
+    ]: ...
+    @overload
+    @classmethod
+    def _decision(
+        cls,
+        target: Option,
+        reference_slots: Slots,
+        method: SlotDeciderMethods,
+    ) -> tuple[
+        SlotKey,
+        OptionSlotValue,
+    ]: ...
+    @classmethod
+    def _decision(
+        cls,
+        target: Schema | Section | Option,
+        reference_slots: Slots,
+        method: SlotDeciderMethods,
+    ) -> tuple[
+        SlotKey,
+        Structure | OptionSlotValue,
     ]:
         """Decides, which slot to access using the passed decider method and the passed
         reference slots.
 
         Args:
-            target (Option | Section): The Option or Section that is to be accessed.
+            target (Option | Section): The Schema, Section or Option
+                that is to be accessed.
             reference_slots (Slots): Slots to use as reference.
             method (SlotDeciderMethods): The method to use for decision making.
 
         Returns:
-            tuple[SlotKey, OptionSlotValue | SectionStructure]: Tuple of the target's
+            tuple[SlotKey, Structure | OptionSlotValue]: Tuple of the target's
                 decided slot's key and value.
 
         """
@@ -1359,14 +1436,7 @@ class SlotViewer(SlotView):
 
     def __getattribute__(self, name: str) -> Any:
 
-        if name in {
-            "__getattribute__",
-            "__setattr__",
-            "__init__",
-            "__new__",
-            "__call__",
-            "__class__",
-        }:
+        if name.startswith("__"):
             return super().__getattribute__(name)
 
         target, attr = super().__getattribute__("_get_target_attr")(name)
