@@ -97,8 +97,8 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             if isinstance(val, Option):
                 if var.startswith(INTERNAL_PREFIX):
                     raise NameError(
-                        f"Option variable names must not\
-                            start with {INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
+                        "Option variable names must not"
+                        f" start with {INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
                     )
 
                 option = Option(key=val.key, type_converter=val._type_converter)
@@ -293,8 +293,8 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
             if isinstance(val, Option):
                 if var.startswith(INTERNAL_PREFIX):
                     raise NameError(
-                        f"Option variable names must not start with\
-                            {INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
+                        "Option variable names must not start with"
+                        f" {INTERNAL_PREFIX_IN_WORDS} (for '{var}')."
                     )
                 out[var] = val
         return out
@@ -908,9 +908,9 @@ class _ReadIni:
                 # we need a current section to extract options and comments
                 if self.current_section is False:
                     warnings.warn(
-                        f"Line {self.current_entity_index + 1} is being ignored\
-                            because it's inside an undefined section and read_undefined\
-                                is set to {self.parameters.read_undefined}.",
+                        "Line {self.current_entity_index + 1} is being ignored"
+                        " because it's inside an undefined section and read_undefined"
+                        f" is set to {self.parameters.read_undefined}.",
                         UndefinedSectionWarning,
                     )
 
@@ -993,9 +993,9 @@ class _ReadIni:
             if self.parameters.read_undefined not in {True, "section"}:
                 # section is not defined and undefined sections are not allowed, thus
                 warnings.warn(
-                    f"Line {self.current_entity_index + 1} is not a defined section,\
-                        thus the whole section is being ignored (read_undefined is\
-                            set to {self.parameters.read_undefined}).",
+                    "Line {self.current_entity_index + 1} is not a defined section,"
+                    " thus the whole section is being ignored (read_undefined is"
+                    f" set to {self.parameters.read_undefined}).",
                     UndefinedSectionWarning,
                 )
                 return False
@@ -1075,9 +1075,9 @@ class _ReadIni:
                 )
             else:
                 warnings.warn(
-                    f"Line {self.current_entity_index + 1} is being ignored because\
-                        it's not a defined option (read_undefined is set to\
-                            {self.parameters.read_undefined}).",
+                    f"Line {self.current_entity_index + 1} is being ignored because"
+                    "it's not a defined option (read_undefined is set to"
+                    f" {self.parameters.read_undefined}).",
                     UndefinedOptionWarning,
                 )
                 return False
@@ -1155,12 +1155,18 @@ class _ReadIni:
             )
         elif self.current_option is None:
             warnings.warn(
-                f"Line {self.current_entity_index + 1} is being ignored because it's invalid.",
+                f"Line {self.current_entity_index + 1} is being ignored"
+                " because it's invalid.",
                 IniStructureWarning,
             )
         elif not self.parameters.multiline_allowed:
             warnings.warn(
-                f"Line {self.current_entity_index + 1} is being ignored because it's multiline to {f"'{self.current_option.key}'" if self.current_option else "an undefined option"} (multiline_allowed is set to {self.parameters.multiline_allowed}).",
+                f"Line {self.current_entity_index + 1} is being ignored because it's"
+                f" multiline to {
+                    f"'{self.current_option.key}'"
+                    if self.current_option
+                    else "an undefined option"}"
+                f" (multiline_allowed is set to {self.parameters.multiline_allowed}).",
                 MultilineWarning,
             )
 
