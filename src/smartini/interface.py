@@ -906,13 +906,14 @@ class _ReadIni:
 
             elif not self.current_section:
                 # we need a current section to extract options and comments
-                if self.current_section is False:
-                    warnings.warn(
-                        "Line {self.current_entity_index + 1} is being ignored"
-                        " because it's inside an undefined section and read_undefined"
-                        f" is set to {self.parameters.read_undefined}.",
-                        UndefinedSectionWarning,
-                    )
+                # if self.current_section is False:
+                #     warnings.warn(
+                #         f"Line {self.current_entity_index + 1} is being ignored"
+                #         " because it's inside an undefined section and read_undefined"
+                #         f" is set to {self.parameters.read_undefined}.",
+                #         UndefinedSectionWarning,
+                #     )
+                pass
 
             # try to extract comment
             elif comment := self._extract_comment():
@@ -993,9 +994,9 @@ class _ReadIni:
             if self.parameters.read_undefined not in {True, "section"}:
                 # section is not defined and undefined sections are not allowed, thus
                 warnings.warn(
-                    "Line {self.current_entity_index + 1} is not a defined section,"
-                    " thus the whole section is being ignored (read_undefined is"
-                    f" set to {self.parameters.read_undefined}).",
+                    f"'{extracted_section_name}' (line {self.current_entity_index + 1})"
+                    " is not a defined section, thus the whole section is being ignored"
+                    f" (read_undefined is set to {self.parameters.read_undefined}).",
                     UndefinedSectionWarning,
                 )
                 return False
@@ -1076,8 +1077,8 @@ class _ReadIni:
             else:
                 warnings.warn(
                     f"Line {self.current_entity_index + 1} is being ignored because"
-                    "it's not a defined option (read_undefined is set to"
-                    f" {self.parameters.read_undefined}).",
+                    f" '{extracted_option.key}' isn't a defined option"
+                    f" (read_undefined is set to {self.parameters.read_undefined}).",
                     UndefinedOptionWarning,
                 )
                 return False
