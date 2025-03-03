@@ -560,7 +560,7 @@ Parameters will be stored as default read and write parameters.
 #### smartini.Schema.**export**
 
 ```python
-Schema.export(path = None, decider_method = None, include_undefined = True, export_comments = False, *, content_slots = None)
+Schema.export(path = None, decider_method = None, include_undefined = True, export_comments = False, *, slots = None)
 ```
 
 Export the saved configuration to a file.
@@ -571,9 +571,9 @@ Export the saved configuration to a file.
 
     Path to the file to export to.
 
-- **structure** (`"schema" | "content" | None`, optional)
+- **structure** (`"schema" | "slot" | None`, optional)
 
-    Slot to use for structuring the output (including comments). If `"schema"`, will use original schema definition. If `"content"`, will use slot that is used as content slot (if multiple content slots are given will use the first). If `None` will use `"schema"` if `content_slots` is `None` and `"content"` otherwise. Defaults to `None`.
+    Slot to use for structuring the output (including comments). If `"schema"`, will use original schema definition. If `"slot"`, will use target slot (if multiple target slots are given will use the first). If `None` will use `"schema"` if `slots` is `None` and `"slot"` otherwise. Defaults to `None`.
 
 - **decider_method** ([`SlotDeciderMethods`](#smartinislotdecidermethods)`| None`, optional)
 
@@ -587,7 +587,7 @@ Export the saved configuration to a file.
 
     Whether to export comments. Will use first content slot to get comments from. Comments will be matched to following entities (e.g. all comments above option_a will be above option_a in the exported ini). Defaults to `False`.
 
-- **content_slots** ([`SlotAccess`](#smartinislotaccess), optional)
+- **slots** ([`SlotAccess`](#smartinislotaccess), optional)
 
     Slot(s) to use for content (sections and options). If multiple are given, first slot has priority, then second (if first is `None`) and so on. If `None`, will use decider method. Defaults to `None`.
 

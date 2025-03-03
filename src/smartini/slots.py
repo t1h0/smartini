@@ -4,7 +4,6 @@ from typing import (
     Literal,
     overload,
     Callable,
-    Generator,
     Any,
     Sequence,
 )
@@ -100,12 +99,15 @@ class Slots[SlotValue](OrderedDict[SlotKey, SlotValue]):
         if slot_access is None:
             slots = list(self.keys())
         else:
+
             slots = slot_access if isinstance(slot_access, list) else [slot_access]
-            if verify is True and (diff := set(slots).difference(self.keys())):
+            slots_set = set(slots)
+
+            if verify is True and (diff := slots_set.difference(self.keys())):
                 raise SlotNotFound(
                     f"Slot(s) '{",".join(str(d) for d in diff)}' doesn't/don't exist(s)."
                 )
-            elif verify is False and (inter := set(slots).intersection(self.keys())):
+            elif verify is False and (inter := slots_set.intersection(self.keys())):
                 raise SlotAlreadyExists(
                     f"Slot(s) '{",".join(str(d) for d in inter)}' already exist(s)."
                 )
@@ -330,18 +332,15 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
                 Otherwise, order matches original schema structure with undefined items
                 at the end.
         """
-        valid_item = (
-            (lambda x: isinstance(x, undefined_item))
-            if include_undefined == "only"
-            else (
-                (lambda x: isinstance(x, defined_item))
-                if include_undefined
-                else (
-                    lambda x: isinstance(x, defined_item)
-                    and not isinstance(x, undefined_item)
+        match include_undefined:
+            case "only":
+                valid_item = lambda x: isinstance(x, undefined_item)
+            case False:
+                valid_item = lambda x: isinstance(x, defined_item) and not isinstance(
+                    x, undefined_item
                 )
-            )
-        )
+            case _:
+                valid_item = lambda x: isinstance(x, defined_item)
 
         if slots is None:
             return OrderedDict(

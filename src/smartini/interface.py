@@ -268,10 +268,10 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
                 Otherwise, order matches original schema structure with undefined options
                 at the end.
         """
-        return self._get_items(  # type: ignore
+        return self._get_items(
             defined_item=Option,
             undefined_item=UndefinedOption,
-            include_undefined=include_undefined,  # type: ignore
+            include_undefined=include_undefined,
             slots=slots,
         )
 
@@ -428,7 +428,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
 
     def _assign_comments_to_options(
         self, *, slots: SlotAccess = None
-    ) -> OrderedDict[Option, OrderedDict[SlotKey, CommentGroup]]:
+    ) -> OrderedDict[Option | None, OrderedDict[SlotKey, CommentGroup]]:
         """Assigns each comment to its following Option. Comments at the end of the section
         (with no following option) will be assigned to "None".
 
@@ -645,10 +645,10 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 Otherwise, order matches original schema structure with undefined sections
                 at the end.
         """
-        return self._get_items(  # type: ignore
+        return self._get_items(
             defined_item=Section,
             undefined_item=UndefinedSection,
-            include_undefined=include_undefined,  # type: ignore
+            include_undefined=include_undefined,
             slots=slots,
         )
 
@@ -697,22 +697,22 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
     def _export(
         self,
         path: str | Path,
-        structure: Literal["schema", "content"] | None = None,
+        structure: Literal["schema", "slot"] | None = None,
         decider_method: SlotDeciderMethods | None = None,
         include_undefined: bool = True,
         export_comments: bool = False,
         *,
-        content_slots: SlotAccess = None,
+        slots: SlotAccess = None,
     ) -> None:
         """Export the saved configuration to a file.
 
         Args:
             path (str | Path): Path to the file to export to.
-            structure ("schema" | "content" | None, optional): Slot to use for
+            structure ("schema" | "slot" | None, optional): Slot to use for
                 structuring the output (including comments). If "schema", will use
-                original schema definition. If "content", will use slot that is used
-                as content slot (if multiple content slots are given will use the first).
-                If None will use "schema" if content_slots is None and "content"
+                original schema definition. If "slot", will use target slot
+                (if multiple target slots are given will use the first).
+                If None will use "schema" if slots is None and "slot"
                 otherwise. Defaults to None.
             decider_method (SlotDeciderMethods | None, optional): Either a decider method
                 to use or None to use the initial decider method. Defaults to None.
@@ -722,14 +722,14 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
                 content slot to get comments from. Comments will be matched to following
                 entities (e.g. all comments above option_a will be above option_a in the
                 exported ini). Defaults to False.
-            content_slots (SlotAccess, optional): Slot(s) to use for content (sections
+            slots (SlotAccess, optional): Slot(s) to use for content (sections
                 and options). If multiple are given, first slot has priority, then
                 second (if first is None) and so on. If None, will use decider method.
                 Defaults to None.
         """
         # get slot access for content
-        access = self._slots.slot_access(content_slots, verify=True)
-        if content_slots is None:
+        access = self._slots.slot_access(slots, verify=True)
+        if slots is None:
             match (decider_method or self._decider_method):
                 case "fallback":
                     access = [access[-1]] + ([access[0]] if len(access) > 1 else [])
@@ -742,16 +742,18 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         # define structure to use
         _schema_structure = lambda section: section._schema_structure
-        _content_structure = lambda section: section[access[0]]
+        """The inital schema structure"""
+        _slot_structure = lambda section: section[access[0]]
+        """The structure as saved in the slot"""
 
         match structure:
             case "schema":
                 entities_structure = _schema_structure
-            case "content":
-                entities_structure = _content_structure
+            case "slot":
+                entities_structure = _slot_structure
             case _:
                 entities_structure = (
-                    _schema_structure if content_slots is None else _content_structure
+                    _schema_structure if slots is None else _slot_structure
                 )
                 structure = "schema"
 
@@ -774,10 +776,15 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
         out = ""
 
-        for sec in self._get_sections(  # type: ignore
-            include_undefined=include_undefined,  # type: ignore
-            slots=None if structure == "schema" else access,
-        ).values():
+        sections = self._get_sections(
+            include_undefined=include_undefined,
+            slots=access,
+        ).values()
+
+        if structure == "schema":
+            sections = set(self._schema_structure).intersection(sections)
+
+        for sec in sections:
             comments = None
 
             if export_comments:
@@ -1210,12 +1217,12 @@ class SlotView:
         )
 
     @classmethod
-    def _slot_access(cls, access_target: Callable, slot: SlotAccess) -> Callable:
-        """Access a callable and set the slot accordingly.
+    def _slot_access(cls, access_target: Callable, slots: SlotAccess) -> Callable:
+        """Access a callable and set the slots accordingly.
 
         Args:
             access_target (Callable): The callable to access.
-            slot (SlotAccess): The slot(s) to access.
+            slots (SlotAccess): The slot(s) to access.
 
         Returns:
             Callable: A function that mimics the requested Callable but sets the
@@ -1229,18 +1236,18 @@ class SlotView:
         def accessor_func(*args, **kwargs):
             return access_target(
                 *args,
-                **({access_kwarg: slot for access_kwarg in access_kwargs} | kwargs),
+                **({access_kwarg: slots for access_kwarg in access_kwargs} | kwargs),
             )
 
         return accessor_func
 
-    def _set_slot(self, name: str, value: Any, slot: SlotAccess) -> None:
+    def _set_slot(self, name: str, value: Any, slots: SlotAccess) -> None:
         """Set the slot(s) of an option.
 
         Args:
             name (str): Variable name of the option.
             value (Any): The new option value.
-            slot (SlotAccess): Slot(s) to set.
+            slots (SlotAccess): Slot(s) to set.
 
         Raises:
             AttributeError: If any other than in option is tried to be set.
@@ -1248,7 +1255,7 @@ class SlotView:
         target, attr = super().__getattribute__("_get_target_attr")(name)
         if not (isinstance(attr, Option) and isinstance(target, Section)):
             raise AttributeError("Assignment only valid for options.")
-        SlotView._slot_access(access_target=target._set_option, slot=slot)(
+        SlotView._slot_access(access_target=target._set_option, slots=slots)(
             name=name, value=value
         )
 

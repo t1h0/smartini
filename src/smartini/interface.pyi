@@ -395,33 +395,33 @@ class Schema:
     def _export(
         cls,
         path: str | Path,
-        structure: Literal["schema", "content"] | None = None,
+        structure: Literal["schema", "slot"] | None = None,
         decider_method: SlotDeciderMethods | None = None,
         include_undefined: bool = True,
         export_comments: bool = False,
         *,
-        content_slots: SlotAccess = None,
+        slots: SlotAccess = None,
     ) -> None: ...
     @classmethod
     def export(
         cls,
         path: str | Path,
-        structure: Literal["schema", "content"] | None = None,
+        structure: Literal["schema", "slot"] | None = None,
         decider_method: SlotDeciderMethods | None = None,
         include_undefined: bool = True,
         export_comments: bool = False,
         *,
-        content_slots: SlotAccess = None,
+        slots: SlotAccess = None,
     ) -> None:
         """Export the saved configuration to a file.
 
         Args:
             path (str | Path): Path to the file to export to.
-            structure ("schema" | "content" | None, optional): Slot to use for
+            structure ("schema" | "slot" | None, optional): Slot to use for
                 structuring the output (including comments). If "schema", will use
-                original schema definition. If "content", will use slot that is used
-                as content slot (if multiple content slots are given will use the first).
-                If None will use "schema" if content_slots is None and "content"
+                original schema definition. If "slot", will use target slot
+                (if multiple target slots are given will use the first).
+                If None will use "schema" if slots is None and "slot"
                 otherwise. Defaults to None.
             decider_method (SlotDeciderMethods | None, optional): Either a decider method
                 to use or None to use the initial decider method. Defaults to None.
@@ -431,7 +431,7 @@ class Schema:
                 content slot to get comments from. Comments will be matched to following
                 entities (e.g. all comments above option_a will be above option_a in the
                 exported ini). Defaults to False.
-            content_slots (SlotAccess, optional): Slot(s) to use for content (sections
+            slots (SlotAccess, optional): Slot(s) to use for content (sections
                 and options). If multiple are given, first slot has priority, then
                 second (if first is None) and so on. If None, will use decider method.
                 Defaults to None.

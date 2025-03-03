@@ -73,7 +73,7 @@ class Comment:
 
         raise ExtractionError("Comment could not be extracted.")
 
-    def to_string(self, prefix: str | None) -> str:
+    def to_string(self, prefix: str | None = None) -> str:
         """Convert the Comment into an ini string.
 
         Args:
@@ -84,6 +84,9 @@ class Comment:
             str: The ini string.
         """
         return f"{prefix} {self.content}" if prefix is not None else self.content
+
+    def __str__(self) -> str:
+        return self.to_string()
 
 
 type OptionValue = Any
@@ -104,6 +107,9 @@ class OptionSlotValue:
 
     input: OptionValue | None = None
     converted: OptionValue | None = None
+
+    def __str__(self) -> str:
+        return str(self.input)
 
 
 class Option(_SlotEntity[OptionSlotValue]):
@@ -228,6 +234,9 @@ class Option(_SlotEntity[OptionSlotValue]):
         )
         return f"{self.key} {delimiter} {value}"
 
+    def __str__(self) -> str:
+        return self.to_string("=")
+
     @classmethod
     def from_string(
         cls,
@@ -314,16 +323,20 @@ class Option(_SlotEntity[OptionSlotValue]):
 class CommentGroup(list[Comment]):
     """Group of Comments."""
 
-    def to_string(self, prefix: str) -> str:
+    def to_string(self, prefix: str | None = None) -> str:
         """Convert group of Comments to one ini string.
 
         Args:
-            prefix (str): Prefix for the comments
+            prefix (str | None, optional): Prefix for the comments. If None, won't add
+                a prefix. Defaults to None.
 
         Returns:
             str: The Comments as one string.
         """
         return "\n".join(comment.to_string(prefix) for comment in self)
+
+    def __str__(self) -> str:
+        return self.to_string()
 
 
 class UndefinedOption(Option):
