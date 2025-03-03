@@ -223,7 +223,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     @overload
     def _get_options(
         self,
-        include_undefined: Literal[False] = ...,
+        include_undefined: Literal[False],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Option]: ...
@@ -237,7 +237,7 @@ class Section(_StructureSlotEntity[Option | Comment], metaclass=SectionMeta):
     @overload
     def _get_options(
         self,
-        include_undefined: Literal["only"] = ...,
+        include_undefined: Literal["only"],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedOption]: ...
@@ -599,7 +599,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
     @overload
     def _get_sections(
         self,
-        include_undefined: Literal[False] = ...,
+        include_undefined: Literal[False],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Section]: ...
@@ -613,7 +613,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
     @overload
     def _get_sections(
         self,
-        include_undefined: Literal["only"] = ...,
+        include_undefined: Literal["only"],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedSection]: ...

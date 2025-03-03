@@ -88,7 +88,7 @@ class Section:
     @overload
     def _get_options(
         self,
-        include_undefined: Literal[False] = ...,
+        include_undefined: Literal[False],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Option]: ...
@@ -102,14 +102,14 @@ class Section:
     @overload
     def _get_options(
         self,
-        include_undefined: Literal["only"] = ...,
+        include_undefined: Literal["only"],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedOption]: ...
     @overload
     def get_options(
         self,
-        include_undefined: Literal[False] = ...,
+        include_undefined: Literal[False],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Option]: ...
@@ -123,7 +123,7 @@ class Section:
     @overload
     def get_options(
         self,
-        include_undefined: Literal["only"] = ...,
+        include_undefined: Literal["only"],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedOption]: ...
@@ -287,7 +287,7 @@ class Schema:
     @overload
     def _get_sections(
         self,
-        include_undefined: Literal[False] = ...,
+        include_undefined: Literal[False],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Section]: ...
@@ -301,14 +301,14 @@ class Schema:
     @overload
     def _get_sections(
         self,
-        include_undefined: Literal["only"] = ...,
+        include_undefined: Literal["only"],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedSection]: ...
     @overload
     def get_sections(
         self,
-        include_undefined: Literal[False] = ...,
+        include_undefined: Literal[False],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, Section]: ...
@@ -322,7 +322,7 @@ class Schema:
     @overload
     def get_sections(
         self,
-        include_undefined: Literal["only"] = ...,
+        include_undefined: Literal["only"],
         *,
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedSection]: ...
