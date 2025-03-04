@@ -796,13 +796,18 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
 
             for entity in entities_structure(sec):
                 if valid_option(entity):
+                    assert isinstance(entity, Option)
                     # add comments if requested
                     if comments is not None and entity in comments:
                         out += comments[entity].iloc[0][1].to_string(comment_prefix)
                         out += "\n"
 
                     # add option
-                    out += entity.to_string(option_delimiter, slots=access)
+                    out += entity.to_string(
+                        delimiter=option_delimiter,
+                        multiline_prefix=self._default_parameters.multiline_prefix,
+                        slots=access,
+                    )
                     out += big_space
 
             if comments is not None and None in comments:

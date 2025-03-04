@@ -10,7 +10,7 @@ from .type_converters.converters import (
     guess_converter,
     ConvertibleTypes,
 )
-from .globals import VALID_MARKERS
+from .globals import VALID_MARKERS, VALID_MULTILINE_PREFIX
 
 
 class Comment:
@@ -95,6 +95,26 @@ type OptionKey = str
 """An option's key."""
 
 
+class OptionValueMultiline(list[Any]):
+    """A multiline option value."""
+
+    def to_string(self, multiline_prefix: VALID_MULTILINE_PREFIX = None):
+        """Convert the multiline option value to a string.
+
+        Args:
+            multiline_prefix (VALID_MULTILINE_PREFIX, optional): Prefix to add to each line.
+                If None, won't add a prefix. Defaults to None.
+
+        Returns:
+            str: The multiline option value as a string.
+        """
+        str_items = (str(i) for i in self)
+        if multiline_prefix is None:
+            return "\n".join(str_items)
+        else:
+            return f"\n{multiline_prefix}".join(str_items)
+
+
 @dataclass(slots=True)
 class OptionSlotValue:
     """Value of one Option slot.
@@ -108,7 +128,20 @@ class OptionSlotValue:
     input: OptionValue | None = None
     converted: OptionValue | None = None
 
-    def __str__(self) -> str:
+    def to_string(self, multiline_prefix: VALID_MULTILINE_PREFIX = None) -> str:
+        """Convert the OptionSlotValue to a string.
+
+        Args:
+            multiline_prefix (VALID_MULTILINE_PREFIX, optional): Prefix to add to each line.
+                If None, won't add a prefix. Defaults to None.
+
+        Returns:
+            str: The converted string.
+        """
+        if isinstance(self.input, OptionValueMultiline):
+            return self.input.to_string(multiline_prefix)
+        if self.input is None:
+            return ""
         return str(self.input)
 
 
@@ -214,12 +247,20 @@ class Option(_SlotEntity[OptionSlotValue]):
             slots=slots,
         )
 
-    def to_string(self, delimiter: VALID_MARKERS, *, slots: SlotAccess = None) -> str:
+    def to_string(
+        self,
+        delimiter: VALID_MARKERS,
+        multiline_prefix: VALID_MULTILINE_PREFIX = None,
+        *,
+        slots: SlotAccess = None,
+    ) -> str:
         """Convert the Option into an ini string.
 
         Args:
             delimiter (VALID_MARKERS): The delimiter to use for separating option key
                 and value.
+            multiline_prefix (VALID_MULTILINE_PREFIX, optional): Prefix to add to each
+                line for multiline values. If None, won't add a prefix. Defaults to None.
             slot (SlotAccess, optional): The slot to get the value from. If multiple are
                 passed, will take the first that is not None (or return an empty string
                 if all are None). If None, will take the first that is not None
@@ -230,7 +271,12 @@ class Option(_SlotEntity[OptionSlotValue]):
         """
         slots = self._slots.slot_access(slots)
         value = next(
-            (str(val) for slot in slots if (val := self._slots[slot]) is not None), ""
+            (
+                val.to_string(multiline_prefix)
+                for slot in slots
+                if (val := self._slots[slot]) != ""
+            ),
+            "",
         )
         return f"{self.key} {delimiter} {value}"
 
@@ -305,17 +351,17 @@ class Option(_SlotEntity[OptionSlotValue]):
         slots = self._slots.slot_access(slots)
         for slot in slots:
             _input = self._slots[slot].input
-            if not isinstance(_input, list):
-                _input = [_input]
+            if not isinstance(_input, OptionValueMultiline):
+                _input = OptionValueMultiline((_input,))
             _input.append(continuation)
-            converted = [
+            converted = OptionValueMultiline(
                 (
                     self._type_converter(i)
                     if self._type_converter
                     else type_converter(i) if type_converter else i
                 )
                 for i in _input
-            ]
+            )
             self._slots[slot].converted = converted
             self._slots[slot].input = _input
 

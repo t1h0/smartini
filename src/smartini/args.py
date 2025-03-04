@@ -6,7 +6,7 @@ from .type_converters.converters import (
     ConvertibleTypes,
     _type_to_converter,
 )
-from .globals import VALID_MARKERS
+from .globals import VALID_MARKERS, VALID_MULTILINE_PREFIX
 
 
 class Parameters:
@@ -17,7 +17,7 @@ class Parameters:
         comment_prefixes: VALID_MARKERS | tuple[VALID_MARKERS, ...] | None = ";",
         option_delimiters: VALID_MARKERS | tuple[VALID_MARKERS, ...] = "=",
         multiline_allowed: bool = True,
-        multiline_prefix: VALID_MARKERS | Literal["\t"] | None = None,
+        multiline_prefix: VALID_MULTILINE_PREFIX = None,
         multiline_ignore: (
             tuple[
                 Literal["section_name", "option_delimiter", "comment_prefix"],
@@ -116,15 +116,14 @@ class Parameters:
         self.verify_between_markers()
 
     @property
-    def multiline_prefix(self) -> str:
+    def multiline_prefix(self) -> VALID_MULTILINE_PREFIX:
         return self._multiline_prefix
 
     @multiline_prefix.setter
-    def multiline_prefix(self, value: VALID_MARKERS | Literal["\t"] | None) -> None:
-        if value is None:
-            self._multiline_prefix = ""
-        else:
-            self._multiline_prefix = re.escape(value)
+    def multiline_prefix(self, value: VALID_MULTILINE_PREFIX) -> None:
+        self._multiline_prefix: VALID_MULTILINE_PREFIX = (
+            "" if value is None else re.escape(value)
+        )
         self.verify_between_markers()
 
     @property

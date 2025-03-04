@@ -72,6 +72,7 @@ SmartIni is a simple, yet fully-featured python library to work with INI configu
         - [smartini.type\_converters.converters.**WrongType**](#smartinitype_convertersconverterswrongtype)
     - [smartini.**UndefinedOption**](#smartiniundefinedoption)
     - [smartini.**VALID\_MARKERS**](#smartinivalid_markers)
+    - [smartini.**VALID\_MULTILINE\_PREFIX**](#smartinivalid_multiline_prefix)
   - [Why still ini?](#why-still-ini)
   - [Contributing](#contributing)
   - [License](#license)
@@ -466,7 +467,7 @@ Option(key, typ = None, type_converter = None, values = None, slots = None)
 #### smartini.Option.**to_string**
 
 ```python
-to_string(delimiter, *, slots = None)
+to_string(delimiter, multiline_prefix = None, *, slots = None)
 ```
 
 Convert the Option into an ini string.
@@ -476,6 +477,10 @@ Convert the Option into an ini string.
 - **delimiter** ([`VALID_MARKERS`](#smartinivalid_markers))
 
     The delimiter to use for separating option key and value.
+
+- **multiline_prefix** ([`VALID_MULTILINE_PREFIX`](#smartinivalid_multiline_prefix))
+
+    Prefix to add to each line for multiline values. If `None`, won't add a prefix. Defaults to `None`.
 
 - **slot** (`SlotAccess`, optional)
 
@@ -1126,6 +1131,14 @@ VALID_MARKERS = Literal["\\","!",'"',"§","%","&","/","(",")","?",":",";","#","'
 ```
 
 Valid characters for markers (option delimiter, comment prefix or multiline prefix).
+
+### smartini.**VALID_MULTILINE_PREFIX**
+
+```python
+VALID_MULTILINE_PREFIX = VALID_MARKERS | Literal["\t", ""] | None
+```
+
+Valid characters for multiline prefix.
 
 ## Why still ini?
 

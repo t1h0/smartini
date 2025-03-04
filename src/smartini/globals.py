@@ -27,3 +27,6 @@ VALID_MARKERS = Literal[
     "=",
 ]
 """Valid characters for markers (option delimiter, comment prefix or multiline prefix)."""
+
+VALID_MULTILINE_PREFIX = VALID_MARKERS | Literal["\t", ""] | None
+"""Valid characters for multiline prefix."""
