@@ -782,7 +782,7 @@ class Schema(_StructureSlotEntity[Section], metaclass=_SchemaMeta):
         ).values()
 
         if structure == "schema":
-            sections = set(self._schema_structure).intersection(sections)
+            sections = tuple(sec for sec in self._schema_structure if sec in sections)
 
         for sec in sections:
             comments = None

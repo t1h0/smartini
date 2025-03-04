@@ -423,13 +423,13 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
                 else slice(pos, pos)
             )
 
-            items_set = set(items)
-
             # check for duplicates
-            if dupl := items_set.intersection(self._slots[s]):
+            if dupl := {item for item in items if item in set(self._slots[s])}:
                 match handle_dupl(pos):
                     case "ignore":
-                        self._slots[s][pos_slice] = items_set.difference(dupl)
+                        self._slots[s][pos_slice] = tuple(
+                            item for item in items if item not in dupl
+                        )
                     case "move":
                         new_slot = []
                         for i, v in enumerate(self._slots[s]):
