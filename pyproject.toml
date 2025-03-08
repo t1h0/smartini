@@ -69,3 +69,6 @@ changelog = "https://github.com/t1h0/smartini/releases"
 issues = "https://github.com/t1h0/smartini/issues"
 homepage = "https://github.com/t1h0/smartini"
 repository = "https://github.com/t1h0/smartini"
+
+[tool.black]
+required-version = "25.1.0"
