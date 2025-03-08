@@ -266,9 +266,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
         super().__init__(Structure)
 
     @overload
-    def _get_items[
-        DefinedItem, UndefinedItem
-    ](
+    def _get_items[DefinedItem, UndefinedItem](
         self,
         defined_item: type[DefinedItem],
         undefined_item: type[UndefinedItem],
@@ -277,9 +275,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
         slots: SlotAccess = None,
     ) -> OrderedDict[str, DefinedItem]: ...
     @overload
-    def _get_items[
-        DefinedItem, UndefinedItem
-    ](
+    def _get_items[DefinedItem, UndefinedItem](
         self,
         defined_item: type[DefinedItem],
         undefined_item: type[UndefinedItem],
@@ -288,9 +284,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
         slots: SlotAccess = None,
     ) -> OrderedDict[str, DefinedItem | UndefinedItem]: ...
     @overload
-    def _get_items[
-        DefinedItem, UndefinedItem
-    ](
+    def _get_items[DefinedItem, UndefinedItem](
         self,
         defined_item: type[DefinedItem],
         undefined_item: type[UndefinedItem],
@@ -299,9 +293,7 @@ class _StructureSlotEntity[StructureItem](_SlotEntity[Structure[StructureItem]])
         slots: SlotAccess = None,
     ) -> OrderedDict[str, UndefinedItem]: ...
 
-    def _get_items[
-        DefinedItem, UndefinedItem
-    ](
+    def _get_items[DefinedItem, UndefinedItem](
         self,
         defined_item: type[DefinedItem],
         undefined_item: type[UndefinedItem],

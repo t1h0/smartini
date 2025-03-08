@@ -148,9 +148,7 @@ class OptionSlotValue:
 class Option(_SlotEntity[OptionSlotValue]):
     """Option object holding an option's value (per slot) and key."""
 
-    def __new__[
-        T
-    ](
+    def __new__[T](
         cls,
         key: OptionKey = "",
         typ: type[T] = type[ConvertibleTypes],

@@ -19,11 +19,9 @@ def _str_to_var(string: str) -> str:
     )
 
 
-def copy_doc[
-    **P, T
-](doc_source: Callable[P, T], annotations: bool = False) -> Callable[
-    [Callable[P, T]], Callable[P, T]
-]:
+def copy_doc[**P, T](
+    doc_source: Callable[P, T], annotations: bool = False
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to copy the docstring of doc_source to another.
     Inspired by Trevor (stackoverflow.com/users/13905088/trevor)
     from: stackoverflow.com/questions/68901049/

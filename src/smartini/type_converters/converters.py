@@ -133,9 +133,7 @@ type Numerics = int | float | complex
 """Possible numeric conversion result types."""
 
 
-def numeric_converter[
-    T: Numerics
-](
+def numeric_converter[T: Numerics](
     numeric_type: type[T] | tuple[type[T], ...] = (int, float, complex),
     decimal_sep: str = ".",
     thousands_sep: str = ",",
@@ -197,9 +195,7 @@ def numeric_converter[
 
 
 @overload
-def list_converter[
-    T
-](
+def list_converter[T](
     delimiter: str = ",",
     remove_whitespace: bool = True,
     item_converter: TypeConverter[T] = ...,
@@ -210,9 +206,7 @@ def list_converter(
     remove_whitespace: bool = True,
     item_converter: None = None,
 ) -> TypeConverter[list[ScalarTypes | Any]]: ...
-def list_converter[
-    T
-](
+def list_converter[T](
     delimiter: str = ",",
     remove_whitespace: bool = True,
     item_converter: TypeConverter[T] | None = None,
@@ -312,16 +306,16 @@ def guess_converter(
 
 
 @overload
-def _type_to_converter[
-    T: ConvertibleTypes
-](type_hint: type[T],) -> TypeConverter[T]: ...
+def _type_to_converter[T: ConvertibleTypes](
+    type_hint: type[T],
+) -> TypeConverter[T]: ...
 @overload
-def _type_to_converter[
-    T: Any
-](type_hint: TypeConverter[T],) -> TypeConverter[T]: ...
-def _type_to_converter[
-    T
-](type_hint: Any,) -> TypeConverter[T] | None:
+def _type_to_converter[T: Any](
+    type_hint: TypeConverter[T],
+) -> TypeConverter[T]: ...
+def _type_to_converter[T](
+    type_hint: Any,
+) -> TypeConverter[T] | None:
     """Convert a type to its respective TypeConverter.
 
     Args:
