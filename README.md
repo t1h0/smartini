@@ -1158,11 +1158,12 @@ As of now, this has been a one person project. If you want to contribute to it, 
     git clone git@github.com:t1h0/smartini.git
     ```
 
-2. Installing the repositories into an python 3.12+ environment
+2. Installing the dev requirements into an python 3.12+ environment
 
     ```shell
     cd smartini
     pip install -r requirements.txt
+    pre-commit install
     ```
 
 3. Add appropriate test files to `./tests` and make sure `pytest .` finishes without a warning or exception.
