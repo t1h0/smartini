@@ -7,8 +7,8 @@ from .exceptions_warnings import ExtractionError
 from .slots import SlotAccess, _SlotEntity
 from .type_converters.converters import (
     TypeConverter,
-    guess_converter,
     ConvertibleTypes,
+    _type_to_converter,
 )
 from .globals import VALID_MARKERS, VALID_MULTILINE_PREFIX
 
@@ -189,7 +189,7 @@ class Option(_SlotEntity[OptionSlotValue]):
         super().__init__(OptionSlotValue)
 
         self.key = key
-        self._type_converter = type_converter or (guess_converter(typ) if typ else None)
+        self._type_converter = type_converter or _type_to_converter(typ)
 
         # verifying slots
         if slots is None:
@@ -234,7 +234,7 @@ class Option(_SlotEntity[OptionSlotValue]):
                 input=input_value,
                 converted=(
                     self._type_converter(input_value)
-                    if self._type_converter
+                    if self._type_converter and input_value is not None
                     else converted_value
                 ),
             )
